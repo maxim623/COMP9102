@@ -56,13 +56,13 @@ public class Recogniser {
 				Token.FLOATLITERAL, Token.BOOLEANLITERAL, Token.STRINGLITERAL));
 		typeFirstSet = new HashSet<Integer>(Arrays.asList(Token.VOID, Token.BOOLEAN, Token.INT, Token.FLOAT));
 	}
-	
+
 	private Scanner scanner;
 	private ErrorReporter errorReporter;
 	private Token currentToken;
 	private static HashSet<Integer> exprFirstSet;
 	private static HashSet<Integer> typeFirstSet;
-	
+
 	public Recogniser (Scanner lexer, ErrorReporter reporter) {
 		scanner = lexer;
 		errorReporter = reporter;
@@ -97,7 +97,7 @@ public class Recogniser {
 	public void parseProgram() {
 		try {
 			while(currentToken.kind != Token.EOF) {
-				
+
 			}
 			parseFuncDecl();
 			if (currentToken.kind != Token.EOF) {
@@ -121,7 +121,7 @@ public class Recogniser {
 		parseInitDeclaratorList();
 		match(Token.SEMICOLON);
 	}
-	
+
 	private void parseInitDeclaratorList() throws SyntaxError {
 		parseInitDeclarator();
 		while(currentToken.kind == Token.COMMA) {
@@ -129,7 +129,7 @@ public class Recogniser {
 			parseInitDeclarator();
 		}
 	}
-	
+
 	private void parseInitDeclarator() throws SyntaxError {
 		parseDeclarator();
 		if(currentToken.kind == Token.EQ) {
@@ -137,18 +137,18 @@ public class Recogniser {
 			parseInitialiser();
 		}
 	}
-	
+
 	private void parseDeclarator() throws SyntaxError {
 		parseIdent();
 		if(currentToken.kind == Token.LBRACKET) {
 			accept();
 			if(currentToken.kind == Token.INTLITERAL) {
-				accept();
+				parseIntLiteral();
 			}
 			match(Token.RBRACKET);
 		}
 	}
-	
+
 	private void parseInitialiser() throws SyntaxError {
 		if(currentToken.kind == Token.LCURLY) {
 			accept();
@@ -162,7 +162,7 @@ public class Recogniser {
 			parseExpr();
 		}
 	}
-	
+
 	private void parseType() throws SyntaxError {
 		if(typeFirstSet.contains(currentToken.kind)) {
 			accept();
@@ -170,7 +170,7 @@ public class Recogniser {
 			syntacticError("Type expected here", "");
 		}
 	}
-	
+
 	// ======================= STATEMENTS ==============================
 	private void parseCompoundStmt() throws SyntaxError {
 		match(Token.LCURLY);
@@ -212,7 +212,7 @@ public class Recogniser {
 			break;
 		}
 	}
-	
+
 	private void parseIfStmt() throws SyntaxError {
 		match(Token.IF);
 		match(Token.LPAREN);
@@ -224,7 +224,7 @@ public class Recogniser {
 			parseStmt();
 		}
 	}
-	
+
 	private void parseForStmt() throws SyntaxError {
 		match(Token.FOR);
 		match(Token.LPAREN);
@@ -241,9 +241,9 @@ public class Recogniser {
 		}
 		match(Token.RPAREN);
 		parseStmt();
-		
+
 	}
-	
+
 	private void parseWhileStmt() throws SyntaxError {
 		match(Token.WHILE);
 		match(Token.RPAREN);
@@ -251,12 +251,12 @@ public class Recogniser {
 		match(Token.LPAREN);
 		parseStmt();
 	}
-	
+
 	private void parseBreakStmt() throws SyntaxError {
 		match(Token.BREAK);
 		match(Token.SEMICOLON);
 	}
-	
+
 	private void parseContinueStmt() throws SyntaxError {
 		match(Token.CONTINUE);
 		match(Token.SEMICOLON);
@@ -269,7 +269,7 @@ public class Recogniser {
 		}
 		match(Token.SEMICOLON);
 	}
-	
+
 	private void parseExprStmt() throws SyntaxError {
 		if(exprFirstSet.contains(currentToken.kind)) {
 			parseExpr();
@@ -295,7 +295,7 @@ public class Recogniser {
 	private void acceptOperator() throws SyntaxError {
 		currentToken = scanner.getToken();
 	}
-	
+
 	// ======================= EXPRESSIONS ======================
 	private void parseExpr() throws SyntaxError {
 		parseAssignExpr();
@@ -322,17 +322,16 @@ public class Recogniser {
 	}
 
 	private void parseUnaryExpr() throws SyntaxError {
-		switch (currentToken.kind) {
-		case Token.MINUS:
+		if(currentToken.kind == Token.PLUS || currentToken.kind == Token.MINUS || 
+				currentToken.kind == Token.NOT) {
 			acceptOperator();
 			parseUnaryExpr();
-		break;
-		default:
+		} else {
 			parsePrimaryExpr();
-			break;
 		}
 	}
 
+	// here is not finished
 	private void parsePrimaryExpr() throws SyntaxError {
 		switch (currentToken.kind) {
 		case Token.ID:
@@ -342,19 +341,23 @@ public class Recogniser {
 			accept();
 			parseExpr();
 			match(Token.RPAREN);
-		break;
-
+			break;
 		case Token.INTLITERAL:
 			parseIntLiteral();
 			break;
-
+		case Token.FLOATLITERAL:
+			parseFloatLiteral();
+			break;
+		case Token.STRINGLITERAL:
+			accept();
+			break;
 		default:
 			syntacticError("illegal parimary expression", currentToken.spelling);
 		}
 	}
 
 	// ========================== LITERALS ========================
-			// Call these methods rather than accept().  In Assignment 3, 
+	// Call these methods rather than accept().  In Assignment 3, 
 	// literal AST nodes will be constructed inside these methods. 
 	private void parseIntLiteral() throws SyntaxError {
 		if (currentToken.kind == Token.INTLITERAL) {
