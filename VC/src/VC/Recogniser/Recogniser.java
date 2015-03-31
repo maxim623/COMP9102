@@ -302,12 +302,58 @@ public class Recogniser {
 	}
 
 	private void parseAssignExpr() throws SyntaxError {
+		parseCondOrExpr();
+		while(currentToken.kind == Token.EQ) {
+			acceptOperator();
+			parseCondOrExpr();
+		}
+	}
+
+	/*
+	 * left recursion
+	 * A -> B | A op B
+	 * 
+	 * A->BA'
+	 * A'-> op B | epsilon
+	 * 
+	 * A->B(op B)*
+	 * */	
+	private void parseCondOrExpr() throws SyntaxError {
+		parseCondAndExpr();
+		while(currentToken.kind == Token.OROR) {
+			acceptOperator();
+			parseCondAndExpr();
+		}
+	}
+
+	private void parseCondAndExpr() throws SyntaxError {
+		parseEqualityExpr();
+		while(currentToken.kind == Token.ANDAND) {
+			acceptOperator();
+			parseEqualityExpr();
+		}
+	}
+
+	private void parseEqualityExpr() throws SyntaxError {
+		parseRelExpr();
+		while(currentToken.kind == Token.EQEQ || currentToken.kind == Token.NOTEQ) {
+			acceptOperator();
+			parseRelExpr();
+		}
+	}
+
+	private void parseRelExpr() throws SyntaxError {
 		parseAdditiveExpr();
+		while(currentToken.kind == Token.LT || currentToken.kind == Token.LTEQ ||
+				currentToken.kind == Token.GT || currentToken.kind == Token.GTEQ) {
+			acceptOperator();
+			parseAdditiveExpr();
+		}
 	}
 
 	private void parseAdditiveExpr() throws SyntaxError {
 		parseMultiplicativeExpr();
-		while (currentToken.kind == Token.PLUS) {
+		while (currentToken.kind == Token.PLUS || currentToken.kind == Token.MINUS) {
 			acceptOperator();
 			parseMultiplicativeExpr();
 		}
@@ -315,7 +361,7 @@ public class Recogniser {
 
 	private void parseMultiplicativeExpr() throws SyntaxError {
 		parseUnaryExpr();
-		while (currentToken.kind == Token.MULT) {
+		while (currentToken.kind == Token.MULT || currentToken.kind == Token.DIV) {
 			acceptOperator();
 			parseUnaryExpr();
 		}
@@ -348,6 +394,9 @@ public class Recogniser {
 		case Token.FLOATLITERAL:
 			parseFloatLiteral();
 			break;
+		case Token.BOOLEANLITERAL:
+			accept();
+			break;
 		case Token.STRINGLITERAL:
 			accept();
 			break;
@@ -378,5 +427,42 @@ public class Recogniser {
 			currentToken = scanner.getToken();
 		} else 
 			syntacticError("boolean literal expected here", "");
+	}
+	
+	private void parseParaList() throws SyntaxError {
+		match(Token.LPAREN);
+		if(typeFirstSet.contains(currentToken.kind)) {
+			parseProperParaList();
+		}
+		match(Token.RPAREN);
+	}
+	
+	private void parseProperParaList() throws SyntaxError {
+		parseParaDecl();
+		while(currentToken.kind == Token.COMMA) {
+			accept();
+			parseParaDecl();
+		}
+	}
+	
+	private void parseParaDecl() throws SyntaxError {
+		parseType();
+		parseDeclarator();
+	}
+	
+	private void parseArgList() throws SyntaxError {
+		match(Token.RPAREN);
+		if(exprFirstSet.contains(currentToken.kind)) {
+			parseProperArgList();
+		}
+		match(Token.RPAREN);
+	}
+	
+	private void parseProperArgList() throws SyntaxError {
+		parseExpr();
+		while(currentToken.kind == Token.COMMA) {
+			accept();
+			parseExpr();
+		}
 	}
 }
