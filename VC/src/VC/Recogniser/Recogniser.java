@@ -13,8 +13,8 @@ import VC.ErrorReporter;
 
 public class Recogniser {
 	static {
-		exprFirstSet = new HashSet<Integer>(Arrays.asList(Token.LPAREN, Token.PLUS, Token.MINUS, Token.NOT, Token.ID, Token.INTLITERAL, 
-				Token.FLOATLITERAL, Token.BOOLEANLITERAL, Token.STRINGLITERAL));
+		exprFirstSet = new HashSet<Integer>(Arrays.asList(Token.LPAREN, Token.PLUS, Token.MINUS, Token.NOT, Token.ID, 
+				Token.INTLITERAL, Token.FLOATLITERAL, Token.BOOLEANLITERAL, Token.STRINGLITERAL));
 		typeFirstSet = new HashSet<Integer>(Arrays.asList(Token.VOID, Token.BOOLEAN, Token.INT, Token.FLOAT));
 	}
 
@@ -27,7 +27,6 @@ public class Recogniser {
 	public Recogniser (Scanner lexer, ErrorReporter reporter) {
 		scanner = lexer;
 		errorReporter = reporter;
-
 		currentToken = scanner.getToken();
 	}
 
@@ -53,41 +52,32 @@ public class Recogniser {
 		throw(new SyntaxError());
 	}
 
-
 	// ========================== PROGRAMS ========================
 	public void parseProgram() {
 		try {
 			while(currentToken.kind != Token.EOF) {
-				if(typeFirstSet.contains(currentToken.kind)) {
-					accept();
-					parseIdent();
-					if(currentToken.kind == Token.LPAREN) {
-						parsePartFuncDecl();
-					} else {
-						parsePartVarDecl();
-					}
+				parseCommonPrefix();
+				if(currentToken.kind == Token.LPAREN) {
+					parsePartFuncDecl();
 				} else {
-					syntacticError("type expected here", "");
+					parsePartVarDecl();
 				}
-			}
+			} 
 			if (currentToken.kind != Token.EOF) {
 				syntacticError("\"%\" wrong result type for a function", currentToken.spelling);
 			}
 		} catch (SyntaxError s) {}
 	}
 
+	private void parseCommonPrefix() throws SyntaxError {
+		parseType();
+		parseIdent();
+	}
+
 	private void parsePartFuncDecl() throws SyntaxError {
 		parseParaList();
 		parseCompoundStmt();
 	}
-
-	// ========================== DECLARATIONS ========================
-	/*private void parseFuncDecl() throws SyntaxError {
-		parseType();
-		parseIdent();
-		parseParaList();
-		parseCompoundStmt();
-	}*/
 
 	private void parsePartVarDecl() throws SyntaxError {
 		if(currentToken.kind == Token.LBRACKET) {
@@ -214,7 +204,7 @@ public class Recogniser {
 	}
 
 	private void parseIfStmt() throws SyntaxError {
-		match(Token.IF);
+		accept();
 		match(Token.LPAREN);
 		parseExpr();
 		match(Token.RPAREN);
@@ -226,7 +216,7 @@ public class Recogniser {
 	}
 
 	private void parseForStmt() throws SyntaxError {
-		match(Token.FOR);
+		accept();
 		match(Token.LPAREN);
 		if(exprFirstSet.contains(currentToken.kind)) {
 			parseExpr();
@@ -244,7 +234,7 @@ public class Recogniser {
 	}
 
 	private void parseWhileStmt() throws SyntaxError {
-		match(Token.WHILE);
+		accept();
 		match(Token.LPAREN);
 		parseExpr();
 		match(Token.RPAREN);
@@ -252,17 +242,17 @@ public class Recogniser {
 	}
 
 	private void parseBreakStmt() throws SyntaxError {
-		match(Token.BREAK);
+		accept();
 		match(Token.SEMICOLON);
 	}
 
 	private void parseContinueStmt() throws SyntaxError {
-		match(Token.CONTINUE);
+		accept();
 		match(Token.SEMICOLON);
 	}
 
 	private void parseReturnStmt() throws SyntaxError {
-		match(Token.RETURN);
+		accept();
 		if(exprFirstSet.contains(currentToken.kind)) {
 			parseExpr();
 		}
@@ -275,7 +265,6 @@ public class Recogniser {
 		}
 		match(Token.SEMICOLON);
 	}
-
 
 	// ======================= IDENTIFIERS ======================
 	// Call parseIdent rather than match(Token.ID). 
@@ -300,14 +289,6 @@ public class Recogniser {
 		parseAssignExpr();
 	}
 
-	private void parseAssignExpr() throws SyntaxError {
-		parseCondOrExpr();
-		while(currentToken.kind == Token.EQ) {
-			acceptOperator();
-			parseCondOrExpr();
-		}
-	}
-
 	/*
 	 * left recursion
 	 * A -> B | A op B
@@ -316,7 +297,15 @@ public class Recogniser {
 	 * A'-> op B | epsilon
 	 * 
 	 * A->B(op B)*
-	 * */	
+	 * */
+	private void parseAssignExpr() throws SyntaxError {
+		parseCondOrExpr();
+		while(currentToken.kind == Token.EQ) {
+			acceptOperator();
+			parseCondOrExpr();
+		}
+	}
+		
 	private void parseCondOrExpr() throws SyntaxError {
 		parseCondAndExpr();
 		while(currentToken.kind == Token.OROR) {
@@ -376,7 +365,6 @@ public class Recogniser {
 		}
 	}
 
-	// here is not finished
 	private void parsePrimaryExpr() throws SyntaxError {
 		switch (currentToken.kind) {
 		case Token.ID:
