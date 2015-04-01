@@ -3,45 +3,6 @@
  * * Recogniser.java            
  * *
  ***/
-
-/* At this stage, this parser accepts a subset of VC defined	by
- * the following grammar. 
- *
- * You need to modify the supplied parsing methods (if necessary) and 
- * add the missing ones to obtain a parser for the VC language.
- *
- * (23-*-March-*-2014)
-
-program       -> func-decl
-
-// declaration
-
-func-decl     -> void identifier "(" ")" compound-stmt
-
-identifier    -> ID
-
-// statements 
-compound-stmt -> "{" stmt* "}" 
-stmt          -> continue-stmt
-    	      |  expr-stmt
-continue-stmt -> continue ";"
-expr-stmt     -> expr? ";"
-
-// expressions 
-expr                -> assignment-expr
-assignment-expr     -> additive-expr
-additive-expr       -> multiplicative-expr
-                    |  additive-expr "+" multiplicative-expr
-multiplicative-expr -> unary-expr
-	            |  multiplicative-expr "*" unary-expr
-unary-expr          -> "-" unary-expr
-		    |  primary-expr
-
-primary-expr        -> identifier
- 		    |  INTLITERAL
-		    | "(" expr ")"
- */
-
 package VC.Recogniser;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -97,23 +58,54 @@ public class Recogniser {
 	public void parseProgram() {
 		try {
 			while(currentToken.kind != Token.EOF) {
-
+				if(typeFirstSet.contains(currentToken.kind)) {
+					accept();
+					parseIdent();
+					if(currentToken.kind == Token.LPAREN) {
+						parsePartFuncDecl();
+					} else {
+						parsePartVarDecl();
+					}
+				} else {
+					syntacticError("type expected here", "");
+				}
 			}
-			parseFuncDecl();
 			if (currentToken.kind != Token.EOF) {
 				syntacticError("\"%\" wrong result type for a function", currentToken.spelling);
 			}
-		}
-		catch (SyntaxError s) {}
+		} catch (SyntaxError s) {}
+	}
+
+	private void parsePartFuncDecl() throws SyntaxError {
+		parseParaList();
+		parseCompoundStmt();
 	}
 
 	// ========================== DECLARATIONS ========================
-	private void parseFuncDecl() throws SyntaxError {
+	/*private void parseFuncDecl() throws SyntaxError {
 		parseType();
 		parseIdent();
-		match(Token.LPAREN);
-		match(Token.RPAREN);
+		parseParaList();
 		parseCompoundStmt();
+	}*/
+
+	private void parsePartVarDecl() throws SyntaxError {
+		if(currentToken.kind == Token.LBRACKET) {
+			accept();
+			if(currentToken.kind == Token.INTLITERAL) {
+				parseIntLiteral();
+			}
+			match(Token.RBRACKET);
+		}
+		if(currentToken.kind == Token.EQ) {
+			accept();
+			parseInitialiser();
+		}
+		while(currentToken.kind == Token.COMMA) {
+			accept();
+			parseInitDeclarator();
+		}
+		match(Token.SEMICOLON);
 	}
 
 	private void parseVarDecl() throws SyntaxError {
@@ -167,7 +159,7 @@ public class Recogniser {
 		if(typeFirstSet.contains(currentToken.kind)) {
 			accept();
 		} else {
-			syntacticError("Type expected here", "");
+			syntacticError("type expected here", "");
 		}
 	}
 
@@ -180,8 +172,16 @@ public class Recogniser {
 
 	// Here, a new nontermial has been introduced to define { stmt } *
 	private void parseStmtList() throws SyntaxError {
-		while (currentToken.kind != Token.RCURLY) 
+		while (currentToken.kind != Token.RCURLY) {
+			if(typeFirstSet.contains(currentToken.kind)) {
+				parseVarDecl();
+			} else {
+				break;
+			}
+		}
+		while(currentToken.kind != Token.RCURLY) {
 			parseStmt();
+		}
 	}
 
 	private void parseStmt() throws SyntaxError {
@@ -241,14 +241,13 @@ public class Recogniser {
 		}
 		match(Token.RPAREN);
 		parseStmt();
-
 	}
 
 	private void parseWhileStmt() throws SyntaxError {
 		match(Token.WHILE);
-		match(Token.RPAREN);
-		parseExpr();
 		match(Token.LPAREN);
+		parseExpr();
+		match(Token.RPAREN);
 		parseStmt();
 	}
 
@@ -382,6 +381,15 @@ public class Recogniser {
 		switch (currentToken.kind) {
 		case Token.ID:
 			parseIdent();
+			if(currentToken.kind == Token.LPAREN) {
+				parseArgList();
+			} else if(currentToken.kind == Token.LBRACKET) {
+				accept();
+				parseExpr();
+				match(Token.RBRACKET);
+			} else {
+				break;
+			}
 			break;
 		case Token.LPAREN:
 			accept();
@@ -395,13 +403,13 @@ public class Recogniser {
 			parseFloatLiteral();
 			break;
 		case Token.BOOLEANLITERAL:
-			accept();
+			parseBooleanLiteral();
 			break;
 		case Token.STRINGLITERAL:
 			accept();
 			break;
 		default:
-			syntacticError("illegal parimary expression", currentToken.spelling);
+			syntacticError("\"%\" illegal parimary expression", currentToken.spelling);
 		}
 	}
 
@@ -428,7 +436,7 @@ public class Recogniser {
 		} else 
 			syntacticError("boolean literal expected here", "");
 	}
-	
+
 	private void parseParaList() throws SyntaxError {
 		match(Token.LPAREN);
 		if(typeFirstSet.contains(currentToken.kind)) {
@@ -436,7 +444,7 @@ public class Recogniser {
 		}
 		match(Token.RPAREN);
 	}
-	
+
 	private void parseProperParaList() throws SyntaxError {
 		parseParaDecl();
 		while(currentToken.kind == Token.COMMA) {
@@ -444,20 +452,20 @@ public class Recogniser {
 			parseParaDecl();
 		}
 	}
-	
+
 	private void parseParaDecl() throws SyntaxError {
 		parseType();
 		parseDeclarator();
 	}
-	
+
 	private void parseArgList() throws SyntaxError {
-		match(Token.RPAREN);
+		match(Token.LPAREN);
 		if(exprFirstSet.contains(currentToken.kind)) {
 			parseProperArgList();
 		}
 		match(Token.RPAREN);
 	}
-	
+
 	private void parseProperArgList() throws SyntaxError {
 		parseExpr();
 		while(currentToken.kind == Token.COMMA) {
