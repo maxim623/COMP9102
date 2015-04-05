@@ -12,6 +12,7 @@ package VC;
 
 import VC.Scanner.Scanner;
 import VC.Scanner.SourceFile;
+import VC.Scanner.Token;
 import VC.Recogniser.Recogniser;
 
 public class vc {
@@ -35,6 +36,8 @@ public class vc {
 
 		reporter = new ErrorReporter();
 		scanner  = new Scanner(source, reporter);
+		//scanner.enableDebugging();	
+
 		recogniser = new Recogniser(scanner, reporter);
 
 		recogniser.parseProgram();
