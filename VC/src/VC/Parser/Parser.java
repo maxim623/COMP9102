@@ -54,6 +54,15 @@ import VC.Scanner.Token;
 import VC.ErrorReporter;
 import VC.ASTs.*;
 
+final class Type_ID {
+	Type typeAST;
+	Ident idAST;
+	public Type_ID(Type _typeAST, Ident _idAST) {
+		typeAST = _typeAST;
+		idAST = _idAST;
+	}
+}
+
 public class Parser {
 	static {
 		exprFirstSet = new HashSet<Integer>(Arrays.asList(Token.LPAREN, Token.PLUS, Token.MINUS, Token.NOT, Token.ID, 
@@ -186,6 +195,33 @@ public class Parser {
 		return fAST;
 	}
 
+	Type_ID parseDeclarator(Type type) throws SyntaxError {
+		SourcePosition declaratorPos = new SourcePosition();
+		start(declaratorPos);
+		Ident idAST = parseIdent();
+		if(currentToken.kind == Token.LBRACKET) {
+			accept();
+			Expr indexExpr = null;
+			if(currentToken.kind == Token.INTLITERAL) {
+				SourcePosition indexPos = new SourcePosition();
+				start(indexPos);
+				IntLiteral intLiteral = parseIntLiteral();
+				finish(indexPos);
+				indexExpr = new IntExpr(intLiteral, indexPos);
+				match(Token.RBRACKET);
+			} else {
+				indexExpr = new EmptyExpr(dummyPos);
+				match(Token.RBRACKET);
+			}
+			finish(declaratorPos);
+			ArrayType arrayTypeAST = new ArrayType(type, indexExpr, declaratorPos);
+			return new Type_ID(arrayTypeAST, idAST);
+		} else {
+			finish(declaratorPos);
+			return new Type_ID(type, idAST);
+		}
+	}
+	
 	//  ======================== TYPES ==========================
 
 	Type parseType() throws SyntaxError {
@@ -535,15 +571,53 @@ public class Parser {
 		}
 		return exprAST;
 	}
-
-	/******************************************/
-	/*Here is not finished yet.*/	
+	
+	ParaDecl parseParaDecl() throws SyntaxError {
+		SourcePosition paraDeclPos = new SourcePosition();
+		start(paraDeclPos);
+		Type type = parseType();
+		Type_ID type_ID = parseDeclarator(type);
+		finish(paraDeclPos);
+		return new ParaDecl(type, type_ID.idAST, paraDeclPos);
+	}
+	
+	List parseArgList() throws SyntaxError {
+		SourcePosition argListPos = new SourcePosition();
+		start(argListPos);
+		match(Token.RPAREN);
+		List properArgListAST = null;
+		if(currentToken.kind == Token.RPAREN) {
+			accept();
+			finish(argListPos);
+			properArgListAST = new EmptyArgList(argListPos);
+		} else {
+			properArgListAST = parseProperArgList();
+		}
+		return properArgListAST;
+	}
+	
+	List parseProperArgList() throws SyntaxError {
+		SourcePosition argListPos = new SourcePosition();
+		start(argListPos);
+		Arg argAST = parseArg();
+		if(currentToken.kind == Token.COMMA) {
+			accept();
+			List argListAST = parseProperArgList();
+			finish(argListPos);
+			return new ArgList(argAST, argListAST, argListPos);
+		} else {
+			match(Token.RPAREN);
+			finish(argListPos);
+			return new ArgList(argAST, new EmptyArgList(argListPos), argListPos);
+		}
+	}
+	
 	Arg parseArg() throws SyntaxError {
 		SourcePosition argPos = new SourcePosition();
 		start(argPos);
-		Arg argAST = null;
 		Expr exprAST = parseExpr();
-		return argAST;
+		finish(argPos);
+		return new Arg(exprAST, argPos);
 	}
 	
 	// ========================== ID, OPERATOR and LITERALS ========================
