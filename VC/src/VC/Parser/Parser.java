@@ -5,6 +5,7 @@
 package VC.Parser;
 import java.util.Arrays;
 import java.util.HashSet;
+
 import VC.Scanner.Scanner;
 import VC.Scanner.SourcePosition;
 import VC.Scanner.Token;
@@ -167,11 +168,8 @@ public class Parser {
 			accept();
 			Expr indexExpr = null;
 			if(currentToken.kind == Token.INTLITERAL) {
-				SourcePosition indexPos = new SourcePosition();
-				copyStart(varDeclPos, indexPos);
 				IntLiteral index = parseIntLiteral();
-				finish(indexPos);
-				indexExpr = new IntExpr(index, indexPos);
+				indexExpr = new IntExpr(index, previousTokenPosition);
 			} else {
 				indexExpr = new EmptyExpr(dummyPos);
 			}
@@ -180,22 +178,26 @@ public class Parser {
 		} else {
 			declType = type;
 		}
+		SourcePosition initDeclPos = new SourcePosition();
+		copyStart(varDeclPos, initDeclPos);
 		if(currentToken.kind == Token.EQ) {
-			SourcePosition initDeclPos = new SourcePosition();
-			copyStart(varDeclPos, initDeclPos);
 			accept();
 			Expr initExprAST = parseInitialiser();
 			if(declType instanceof ArrayType) {
 				finish(initDeclPos);
-				declAST = new LocalVarDecl(declType, id, initExprAST, initDeclPos);
+				declAST = new GlobalVarDecl(declType, id, initExprAST, initDeclPos);
 			} else {
 				finish(initDeclPos);
-				declAST = new LocalVarDecl(declType, id, new EmptyExpr(dummyPos), initDeclPos);
+				declAST = new GlobalVarDecl(declType, id, new EmptyExpr(dummyPos), initDeclPos);
 			}
+		} else {
+			finish(initDeclPos);
+			declAST = new GlobalVarDecl(declType, id, new EmptyExpr(dummyPos), initDeclPos);
 		}
 		if(currentToken.kind == Token.COMMA) {
 			accept();
-			List subDeclAST = parseInitDeclaratorList(type);
+			boolean isGlobal = true;
+			List subDeclAST = parseInitDeclaratorList(type, isGlobal);
 			finish(varDeclPos);
 			varDeclAST = new DeclList(declAST, subDeclAST, varDeclPos);
 		} else {
@@ -208,19 +210,20 @@ public class Parser {
 
 	private List parseVarDecl() throws SyntaxError {
 		Type type = parseType();
-		List declListAST = parseInitDeclaratorList(type);
+		boolean isGlobal = false;
+		List declListAST = parseInitDeclaratorList(type, isGlobal);
 		match(Token.SEMICOLON);
 		return declListAST;
 	}
 
-	private List parseInitDeclaratorList(Type type) throws SyntaxError {
+	private List parseInitDeclaratorList(Type type, boolean isGlobal) throws SyntaxError {
 		SourcePosition initDeclPos = new SourcePosition();
 		start(initDeclPos);
-		Decl declAST = parseInitDeclarator(type);
+		Decl declAST = parseInitDeclarator(type, isGlobal);
 		List declListAST = null;
-		if(currentToken.kind == Token.EQ) {
+		if(currentToken.kind == Token.COMMA) {
 			accept();
-			List subList = parseInitDeclaratorList(type);
+			List subList = parseInitDeclaratorList(type, isGlobal);
 			finish(initDeclPos);
 			declListAST = new DeclList(declAST, subList, initDeclPos);
 		} else {
@@ -230,7 +233,7 @@ public class Parser {
 		return declListAST;
 	}
 
-	private Decl parseInitDeclarator(Type declType) throws SyntaxError {
+	private Decl parseInitDeclarator(Type declType, boolean isGlobal) throws SyntaxError {
 		SourcePosition initDeclPos = new SourcePosition();
 		start(initDeclPos);
 		Decl declAST = null;
@@ -239,10 +242,18 @@ public class Parser {
 			accept();
 			Expr initExprAST = parseInitialiser();
 			finish(initDeclPos);
-			declAST = new LocalVarDecl(type_ID.typeAST, type_ID.id, initExprAST, initDeclPos);
+			if(isGlobal) {
+				declAST = new GlobalVarDecl(type_ID.typeAST, type_ID.id, initExprAST, initDeclPos);
+			} else {
+				declAST = new LocalVarDecl(type_ID.typeAST, type_ID.id, initExprAST, initDeclPos);
+			}
 		} else {
 			finish(initDeclPos);
-			declAST = new LocalVarDecl(type_ID.typeAST, type_ID.id, new EmptyExpr(dummyPos), initDeclPos);
+			if(isGlobal) {
+				declAST = new GlobalVarDecl(type_ID.typeAST, type_ID.id, new EmptyExpr(dummyPos), initDeclPos);
+			} else {
+				declAST = new LocalVarDecl(type_ID.typeAST, type_ID.id, new EmptyExpr(dummyPos), initDeclPos);
+			}
 		}
 		return declAST;
 	}
@@ -255,11 +266,8 @@ public class Parser {
 			accept();
 			Expr indexExpr = null;
 			if(currentToken.kind == Token.INTLITERAL) {
-				SourcePosition indexPos = new SourcePosition();
-				start(indexPos);
 				IntLiteral intLiteral = parseIntLiteral();
-				finish(indexPos);
-				indexExpr = new IntExpr(intLiteral, indexPos);
+				indexExpr = new IntExpr(intLiteral, previousTokenPosition);
 				match(Token.RBRACKET);
 			} else {
 				indexExpr = new EmptyExpr(dummyPos);
@@ -278,11 +286,12 @@ public class Parser {
 		SourcePosition initPos = new SourcePosition();
 		start(initPos);
 		Expr initAST = null;
-		if(currentToken.kind == Token.LPAREN) {
+		if(currentToken.kind == Token.LCURLY) {
 			accept();
 			List initListAST = parseInitExprList();
 			finish(initPos);
 			initAST = new InitExpr(initListAST, initPos);
+			match(Token.RCURLY);
 		} else {
 			finish(initPos);
 			initAST = parseExpr();
@@ -290,6 +299,7 @@ public class Parser {
 		return initAST;
 	}
 
+	// this nonterminal is expr | expr (, expr)*, used only in initialiser
 	private List parseInitExprList() throws SyntaxError {
 		SourcePosition initPos = new SourcePosition();
 		start(initPos);
@@ -301,7 +311,6 @@ public class Parser {
 			finish(initPos);
 			listAST = new ExprList(exprAST, subListAST, initPos);
 		} else {
-			match(Token.RPAREN);
 			finish(initPos);
 			listAST = new ExprList(exprAST, new EmptyExprList(dummyPos), initPos);
 		}
@@ -357,6 +366,7 @@ public class Parser {
 		start(declListPos);
 		List listAST = null;
 		if(typeFirstSet.contains(currentToken)) {
+			// declaration list appears here locates in compound statements, so it is local declaration.
 			listAST = parseVarDecl();
 			List rightMostDeclListAST = listAST;
 			while(!(((DeclList)rightMostDeclListAST).DL instanceof EmptyDeclList)) {
@@ -372,25 +382,28 @@ public class Parser {
 
 	// Here, a new nontermial has been introduced to define { stmt } *
 	private List parseStmtList() throws SyntaxError {
-		List slAST = null; 
 		SourcePosition stmtPos = new SourcePosition();
 		start(stmtPos);
+		List stmtListAST = null; 
 		if (currentToken.kind != Token.RCURLY) {
-			Stmt sAST = parseStmt();
+			Stmt stmtAST = parseStmt();
+			List subList = null;
 			if (currentToken.kind != Token.RCURLY) {
-				slAST = parseStmtList();
+				subList = parseStmtList();
 				finish(stmtPos);
-				slAST = new StmtList(sAST, slAST, stmtPos);
+				stmtListAST = new StmtList(stmtAST, subList, stmtPos);
 			} else {
 				finish(stmtPos);
-				slAST = new StmtList(sAST, new EmptyStmtList(dummyPos), stmtPos);
+				stmtListAST = new StmtList(stmtAST, new EmptyStmtList(dummyPos), stmtPos);
 			}
 		}
-		else
-			slAST = new EmptyStmtList(dummyPos);
-		return slAST;
+		else {
+			accept();
+			stmtListAST = new EmptyStmtList(dummyPos);
+		}
+		return stmtListAST;
 	}
-// code below has been checked
+
 	private Stmt parseStmt() throws SyntaxError {
 		Stmt sAST = null;
 		switch(currentToken.kind) {
