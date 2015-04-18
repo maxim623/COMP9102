@@ -69,8 +69,8 @@ public class vc {
         if (i == args.length)
            cmdLineOptions();
         else {
-        	int index = 47;
-        	inputFilename = args[i] + index + ".vc";
+        	//int index = 47;
+        	inputFilename = args[i]/* + index + ".vc"*/;
         	System.out.println("File Name :" + inputFilename);
         }
 

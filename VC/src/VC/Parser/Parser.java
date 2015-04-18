@@ -13,8 +13,8 @@ import VC.ErrorReporter;
 import VC.ASTs.*;
 
 final class Type_ID {
-	Type typeAST;
-	Ident id;
+	public Type typeAST;
+	public Ident id;
 	public Type_ID(Type _typeAST, Ident _id) {
 		typeAST = _typeAST;
 		id = _id;
@@ -45,7 +45,6 @@ public class Parser {
 	// match checks to see f the current token matches tokenExpected.
 	// If so, fetches the next token.
 	// If not, reports a syntactic error.
-
 	void match(int tokenExpected) throws SyntaxError {
 		if (currentToken.kind == tokenExpected) {
 			previousTokenPosition = currentToken.position;
@@ -69,16 +68,14 @@ public class Parser {
 	// start records the position of the start of a phrase.
 	// This is defined to be the position of the first
 	// character of the first token of the phrase.
-
 	void start(SourcePosition position) {
 		position.lineStart = currentToken.position.lineStart;
 		position.charStart = currentToken.position.charStart;
 	}
-
+	
 	// finish records the position of the end of a phrase.
 	// This is defined to be the position of the last
 	// character of the last token of the phrase.
-
 	void finish(SourcePosition position) {
 		position.lineFinish = previousTokenPosition.lineFinish;
 		position.charFinish = previousTokenPosition.charFinish;
@@ -137,11 +134,13 @@ public class Parser {
 			declListAST = new DeclList(funDeclAST, subList, preFixPos);
 		}
 		if(varDeclAST != null) {
-			List rightMostDeclListAST = varDeclAST;
-			while(!(((DeclList)rightMostDeclListAST).DL instanceof EmptyDeclList)) {
-				rightMostDeclListAST = ((DeclList)rightMostDeclListAST).DL;
+			// find the EmptyDeclList in current DeclList, and it always the tree node.
+			// Connect subAST to this tree node.
+			DeclList rightMostDeclListAST = (DeclList)varDeclAST;
+			while(!(rightMostDeclListAST.DL instanceof EmptyDeclList)) {
+				rightMostDeclListAST = (DeclList) rightMostDeclListAST.DL;
 			}
-			((DeclList)rightMostDeclListAST).DL = subList;
+			rightMostDeclListAST.DL = subList;
 			declListAST = varDeclAST;
 		}
 		return declListAST;
@@ -163,6 +162,8 @@ public class Parser {
 		Type declType = null;
 		Decl declAST = null;
 		if(currentToken.kind == Token.LBRACKET) {
+			// this is declarator part
+			// array declaration
 			accept();
 			Expr indexExpr = null;
 			if(currentToken.kind == Token.INTLITERAL) {
@@ -174,14 +175,17 @@ public class Parser {
 			match(Token.RBRACKET);
 			declType = new ArrayType(type, indexExpr, varDeclPos);
 		} else {
+			// global variable declaration
 			declType = type;
 		}
 		SourcePosition initDeclPos = new SourcePosition();
 		copyStart(varDeclPos, initDeclPos);
 		if(currentToken.kind == Token.EQ) {
+			// this is init-declarator part
 			accept();
 			Expr initExprAST = parseInitialiser();
 			if(declType instanceof ArrayType) {
+				// the arrays and variables declared here must be global variable
 				finish(initDeclPos);
 				declAST = new GlobalVarDecl(declType, id, initExprAST, initDeclPos);
 			} else {
@@ -193,7 +197,9 @@ public class Parser {
 			declAST = new GlobalVarDecl(declType, id, new EmptyExpr(dummyPos), initDeclPos);
 		}
 		if(currentToken.kind == Token.COMMA) {
+			// this is init-declarator-list part
 			accept();
+			// same as before, the arrays and variables declared here must be global variable
 			boolean isGlobal = true;
 			List subDeclAST = parseInitDeclaratorList(type, isGlobal);
 			finish(varDeclPos);
@@ -208,6 +214,8 @@ public class Parser {
 
 	private List parseVarDecl() throws SyntaxError {
 		Type type = parseType();
+		// the global variables declaration has been processed in method parsePartVarDecl
+		// therefore, all the declarations here must be local variables
 		boolean isGlobal = false;
 		List declListAST = parseInitDeclaratorList(type, isGlobal);
 		match(Token.SEMICOLON);
@@ -240,6 +248,7 @@ public class Parser {
 			accept();
 			Expr initExprAST = parseInitialiser();
 			finish(initDeclPos);
+			// create different variable declaration according to isGlobal flag
 			if(isGlobal) {
 				declAST = new GlobalVarDecl(type_ID.typeAST, type_ID.id, initExprAST, initDeclPos);
 			} else {
@@ -256,6 +265,8 @@ public class Parser {
 		return declAST;
 	}
 
+	// type information must be passed to here in order to create corresponding expression
+	// besides, this method need to disambiguate the declaration is a common variable or a array
 	private Type_ID parseDeclarator(Type type) throws SyntaxError {
 		SourcePosition declaratorPos = new SourcePosition();
 		start(declaratorPos);
@@ -367,11 +378,12 @@ public class Parser {
 		if(typeFirstSet.contains(currentToken.kind)) {
 			// declaration list appears here locates in compound statements, so it is local declaration.
 			listAST = parseVarDecl();
-			List rightMostDeclListAST = listAST;
-			while(!(((DeclList)rightMostDeclListAST).DL instanceof EmptyDeclList)) {
-				rightMostDeclListAST = ((DeclList)rightMostDeclListAST).DL;
+			// find the tree node EmptyDeclList and substitute it with subDeclList
+			DeclList rightMostDeclListAST = (DeclList) listAST;
+			while(!(rightMostDeclListAST.DL instanceof EmptyDeclList)) {
+				rightMostDeclListAST = (DeclList) rightMostDeclListAST.DL;
 			}
-			((DeclList)rightMostDeclListAST).DL =  parseVarDeclList();
+			rightMostDeclListAST.DL =  parseVarDeclList();
 		} else {
 			finish(declListPos);
 			listAST = new EmptyDeclList(dummyPos);
@@ -549,7 +561,7 @@ public class Parser {
 		}
 		return sAST;
 	}
-	// ======================= EXPRESSIONS ======================
+
 	/*
 	 * left recursion
 	 * A -> B | A op B
