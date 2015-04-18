@@ -38,9 +38,7 @@ public class Parser {
 	public Parser (Scanner lexer, ErrorReporter reporter) {
 		scanner = lexer;
 		errorReporter = reporter;
-
 		previousTokenPosition = new SourcePosition();
-
 		currentToken = scanner.getToken();
 	}
 
@@ -117,7 +115,7 @@ public class Parser {
 		List varDeclAST = null;
 		Type type = null;
 		Ident id = null;
-		if(typeFirstSet.contains(currentToken)) {
+		if(typeFirstSet.contains(currentToken.kind)) {
 			type = parseType();
 			id = parseIdent();
 			if(currentToken.kind == Token.LPAREN) {
@@ -129,7 +127,7 @@ public class Parser {
 			return new EmptyDeclList(dummyPos);
 		}
 
-		if(typeFirstSet.contains(currentToken)) {
+		if(typeFirstSet.contains(currentToken.kind)) {
 			subList = parseCommonPrefix();
 		} else {
 			subList = new EmptyDeclList(dummyPos);
@@ -143,7 +141,7 @@ public class Parser {
 			while(!(((DeclList)rightMostDeclListAST).DL instanceof EmptyDeclList)) {
 				rightMostDeclListAST = ((DeclList)rightMostDeclListAST).DL;
 			}
-			rightMostDeclListAST = subList;
+			((DeclList)rightMostDeclListAST).DL = subList;
 			declListAST = varDeclAST;
 		}
 		return declListAST;
@@ -339,6 +337,7 @@ public class Parser {
 			syntacticError("type expected here", "");
 			break;
 		}
+		accept();
 		return typeAST;
 	}
 
@@ -365,14 +364,14 @@ public class Parser {
 		SourcePosition declListPos = new SourcePosition();
 		start(declListPos);
 		List listAST = null;
-		if(typeFirstSet.contains(currentToken)) {
+		if(typeFirstSet.contains(currentToken.kind)) {
 			// declaration list appears here locates in compound statements, so it is local declaration.
 			listAST = parseVarDecl();
 			List rightMostDeclListAST = listAST;
 			while(!(((DeclList)rightMostDeclListAST).DL instanceof EmptyDeclList)) {
 				rightMostDeclListAST = ((DeclList)rightMostDeclListAST).DL;
 			}
-			rightMostDeclListAST =  parseVarDeclList();
+			((DeclList)rightMostDeclListAST).DL =  parseVarDeclList();
 		} else {
 			finish(declListPos);
 			listAST = new EmptyDeclList(dummyPos);
@@ -398,7 +397,6 @@ public class Parser {
 			}
 		}
 		else {
-			accept();
 			stmtListAST = new EmptyStmtList(dummyPos);
 		}
 		return stmtListAST;
@@ -525,7 +523,7 @@ public class Parser {
 		start(retPos);
 		Expr retExprAST = null;
 		accept();
-		if(exprFirstSet.contains(currentToken)) {
+		if(exprFirstSet.contains(currentToken.kind)) {
 			retExprAST = parseExpr();
 		} else {
 			retExprAST = new EmptyExpr(dummyPos);
@@ -539,7 +537,7 @@ public class Parser {
 		SourcePosition stmtPos = new SourcePosition();
 		start(stmtPos);
 		Stmt sAST = null;
-		if (exprFirstSet.contains(currentToken)) {
+		if (exprFirstSet.contains(currentToken.kind)) {
 			Expr eAST = parseExpr();
 			match(Token.SEMICOLON);
 			finish(stmtPos);
@@ -760,7 +758,7 @@ public class Parser {
 		if(currentToken.kind == Token.RPAREN) {
 			accept();
 			finish(paraListPos);
-			paraListAST = new EmptyDeclList(dummyPos);
+			paraListAST = new EmptyParaList(dummyPos);
 		} else {
 			paraListAST = parseProperParaList();
 			match(Token.RPAREN);
@@ -772,16 +770,16 @@ public class Parser {
 	private List parseProperParaList() throws SyntaxError {
 		SourcePosition properParaListPos = new SourcePosition();
 		start(properParaListPos);
-		Decl declAST = parseParaDecl();
+		ParaDecl declAST = parseParaDecl();
 		List listAST = null;
 		if(currentToken.kind == Token.COMMA) {
 			accept();
 			List subList = parseProperParaList();
 			finish(properParaListPos);
-			listAST = new DeclList(declAST, subList, properParaListPos);
+			listAST = new ParaList(declAST, subList, properParaListPos);
 		} else {
 			finish(properParaListPos);
-			listAST = new DeclList(declAST, new EmptyDeclList(dummyPos), properParaListPos);
+			listAST = new ParaList(declAST, new EmptyParaList(dummyPos), properParaListPos);
 		}
 		return listAST;
 	}
@@ -806,6 +804,7 @@ public class Parser {
 			argListAST = new EmptyArgList(dummyPos);
 		} else {
 			argListAST = parseProperArgList();
+			match(Token.RPAREN);
 		}
 		return argListAST;
 	}

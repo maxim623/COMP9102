@@ -68,8 +68,11 @@ public class vc {
         }
         if (i == args.length)
            cmdLineOptions();
-        else
-           inputFilename = args[i];
+        else {
+        	int index = 40;
+        	inputFilename = args[i] + index + ".vc";
+        	System.out.println("File Name :" + inputFilename);
+        }
 
         System.out.println("======= The VC compiler =======");
 
@@ -77,6 +80,7 @@ public class vc {
 
         reporter = new ErrorReporter();
         scanner  = new Scanner(source, reporter);
+        scanner.enableDebugging();
         parser   = new Parser(scanner, reporter);
 
         if (ASTFilename == null)
