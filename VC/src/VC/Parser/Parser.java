@@ -1,55 +1,10 @@
 /*
  * Parser.java            
- *
- * This parser for a subset of the VC language is intended to 
- *  demonstrate how to create the AST nodes, including (among others): 
- *  [1] a list (of statements)
- *  [2] a function
- *  [3] a statement (which is an expression statement), 
- *  [4] a unary expression
- *  [5] a binary expression
- *  [6] terminals (identifiers, integer literals and operators)
- *
- * In addition, it also demonstrates how to use the two methods start 
- * and finish to determine the position information for the start and 
- * end of a construct (known as a phrase) corresponding an AST node.
- *
- * NOTE THAT THE POSITION INFORMATION WILL NOT BE MARKED. HOWEVER, IT CAN BE
- * USEFUL TO DEBUG YOUR IMPLEMENTATION.
- *
- * (10-*-April-*-2015)
-
-
-program       -> func-decl
-func-decl     -> type identifier "(" ")" compound-stmt
-type          -> void
-identifier    -> ID
-// statements
-compound-stmt -> "{" stmt* "}" 
-stmt          -> expr-stmt
-expr-stmt     -> expr? ";"
-// expressions 
-expr                -> additive-expr
-additive-expr       -> multiplicative-expr
-                    |  additive-expr "+" multiplicative-expr
-                    |  additive-expr "-" multiplicative-expr
-multiplicative-expr -> unary-expr
-	            |  multiplicative-expr "*" unary-expr
-	            |  multiplicative-expr "/" unary-expr
-unary-expr          -> "-" unary-expr
-		    |  primary-expr
-
-primary-expr        -> identifier
- 		    |  INTLITERAL
-		    | "(" expr ")"
  */
 
 package VC.Parser;
 import java.util.Arrays;
 import java.util.HashSet;
-
-import com.sun.org.apache.xerces.internal.impl.xpath.regex.Match;
-
 import VC.Scanner.Scanner;
 import VC.Scanner.SourcePosition;
 import VC.Scanner.Token;
@@ -249,44 +204,6 @@ public class Parser {
 		}
 		match(Token.SEMICOLON);
 		return varDeclAST;
-	}
-
-
-	// ========================== DECLARATIONS ========================
-	private List parseFuncDeclList() throws SyntaxError {
-		List dlAST = null;
-		Decl dAST = null;
-
-		SourcePosition funcPos = new SourcePosition();
-		start(funcPos);
-
-		dAST = parseFuncDecl();
-
-		if (currentToken.kind == Token.VOID) {
-			dlAST = parseFuncDeclList();
-			finish(funcPos);
-			dlAST = new DeclList(dAST, dlAST, funcPos);
-		} else if (dAST != null) {
-			finish(funcPos);
-			dlAST = new DeclList(dAST, new EmptyDeclList(dummyPos), funcPos);
-		}
-		if (dlAST == null) 
-			dlAST = new EmptyDeclList(dummyPos);
-
-		return dlAST;
-	}
-
-	private Decl parseFuncDecl() throws SyntaxError {
-		Decl fAST = null; 
-		SourcePosition funcPos = new SourcePosition();
-		start(funcPos);
-		Type tAST = parseType();
-		Ident iAST = parseIdent();
-		List fplAST = parseParaList();
-		Stmt cAST = parseCompoundStmt();
-		finish(funcPos);
-		fAST = new FuncDecl(tAST, iAST, fplAST, cAST, funcPos);
-		return fAST;
 	}
 
 	private List parseVarDecl() throws SyntaxError {
