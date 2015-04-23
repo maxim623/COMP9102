@@ -72,7 +72,7 @@ public class Parser {
 		position.lineStart = currentToken.position.lineStart;
 		position.charStart = currentToken.position.charStart;
 	}
-	
+
 	// finish records the position of the end of a phrase.
 	// This is defined to be the position of the last
 	// character of the last token of the phrase.
@@ -184,14 +184,9 @@ public class Parser {
 			// this is init-declarator part
 			accept();
 			Expr initExprAST = parseInitialiser();
-			if(declType instanceof ArrayType) {
-				// the arrays and variables declared here must be global variable
-				finish(initDeclPos);
-				declAST = new GlobalVarDecl(declType, id, initExprAST, initDeclPos);
-			} else {
-				finish(initDeclPos);
-				declAST = new GlobalVarDecl(declType, id, new EmptyExpr(dummyPos), initDeclPos);
-			}
+			finish(initDeclPos);
+			declAST = new GlobalVarDecl(declType, id, initExprAST, initDeclPos);
+
 		} else {
 			finish(initDeclPos);
 			declAST = new GlobalVarDecl(declType, id, new EmptyExpr(dummyPos), initDeclPos);
