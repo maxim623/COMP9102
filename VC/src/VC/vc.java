@@ -125,6 +125,7 @@ public class vc {
 
         System.out.println("Pass 1: Lexical and syntactic Analysis");
         scanner  = new Scanner(source, reporter);
+        scanner.enableDebugging();
         parser   = new Parser(scanner, reporter);
 
 	theAST = parser.parseProgram();
