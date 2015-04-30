@@ -267,10 +267,6 @@ public final class Checker implements Visitor {
 		return null;
 	}
 
-	public Object visitEmptyArgList(EmptyArgList ast, Object o) {
-		return null;
-	}
-
 	public Object visitIntExpr(IntExpr ast, Object o) {
 		ast.type = StdEnvironment.intType;
 		return ast.type;
@@ -485,26 +481,34 @@ public final class Checker implements Visitor {
 			if(actualType.isArrayType()) {
 				Type formalArrayType = ((ArrayType)formalType).T;
 				Type actualArrayType = ((ArrayType)actualType).T;
-				if(formalArrayType.assignable(actualArrayType)) {
+				if(actualArrayType.assignable(formalArrayType)) {
 					isMatch = true;
-				} else {
-					isMatch = false;
 				}
-			} else {
-				isMatch = false;
 			}
 		} else {
 			if(actualType.assignable(formalType)) {
 				isMatch = true;
-			} else {
-				isMatch = false;
 			}
 		}
 		if(!isMatch) {
 			reporter.reportError(errMesg[27], "", arg.E.position);
 		}
 		if(actualType.equals(StdEnvironment.intType) && formalType.equals(StdEnvironment.floatType)) {
-			// convert here
+			// type coercion here
+			arg.E = i2f(arg.E);
+		}
+		return null;
+	}
+	
+	/*
+	 * Check the too few actual argument
+	 * object o is formal parameter list. If it is not empty, report error.
+	 * */
+	@Override
+	public Object visitEmptyArgList(EmptyArgList emptyArgList, Object o) {
+		List formalParaList = (List)o;
+		if(formalParaList instanceof EmptyParaList) {
+			reporter.reportError(errMesg[26], "", emptyArgList.position);
 		}
 		return null;
 	}
@@ -578,7 +582,15 @@ public final class Checker implements Visitor {
 		idTable.insert (id, binding);
 		return binding;
 	}
-
+	
+	private Expr i2f(Expr currentExpr) {
+		Expr newExpr = new UnaryExpr(new Operator("i2f", currentExpr.position), currentExpr, currentExpr.position);
+		newExpr.type = StdEnvironment.floatType;
+		newExpr.parent = currentExpr.parent;
+		currentExpr.parent = newExpr;
+		return newExpr;
+	}
+	
 	// Creates small ASTs to represent "declarations" of all 
 	// build-in functions.
 	// Inserts these "declarations" into the symbol table.
