@@ -202,26 +202,90 @@ public final class Checker implements Visitor {
 		return ast.type;
 	}
 
+	@Override
+	public Object visitExprList(ExprList ast, Object o) {
+		
+	}
+	
 	public Object visitStringExpr(StringExpr ast, Object o) {
 		ast.type = StdEnvironment.stringType;
 		return ast.type;
 	}
+	
+	@Override
+	public Object visitArrayExpr(ArrayExpr arrayExpr, Object o) {
+		Decl arrayDecl = idTable.retrieve(((SimpleVar)arrayExpr.V).I.spelling);
+		if(arrayDecl == null) {
+			// array not declared
+			reporter.reportError(errMesg[5], ((SimpleVar)arrayExpr.V).I.spelling, arrayDecl.position);
+			arrayExpr.type = StdEnvironment.errorType;
+		} else {
+			if(!arrayDecl.T.isArrayType()) {
+				// declaration is not a array
+				reporter.reportError(errMesg[12], arrayDecl.I.spelling, arrayExpr.position);
+				arrayExpr.type = StdEnvironment.errorType;
+			} 
+			
+			Type indexType = (Type)arrayExpr.E.visit(this, null);
+			if(!indexType.isIntType()) {
+				// array index is not an integer
+				reporter.reportError(errMesg[17], arrayDecl.I.spelling, arrayExpr.position);
+				arrayExpr.type = StdEnvironment.errorType;
+			}
+		}
+		return arrayExpr.type;
+	}
 
-	public Object visitVarExpr(VarExpr ast, Object o) {
-		ast.type = (Type) ast.V.visit(this, null);
-		return ast.type;
+	
+	@Override
+	public Object visitVarExpr(VarExpr varExpr, Object o) {
+		varExpr.type = (Type)varExpr.visit(this, null);
+		return varExpr.type;
+	}
+	
+	@Override
+	public Object visitCallExpr(CallExpr call, Object o) {
+		Decl funcDecl = idTable.retrieve(call.I.spelling);
+		if(funcDecl == null) {
+			// cannot find symbol
+			reporter.reportError(errMesg[5], call.I.spelling, call.position);
+			call.type = StdEnvironment.errorType;
+		} else if (funcDecl.isFuncDecl()) {
+			// fetch formal parameter list from function declaration and pass it to actual parameters
+			call.AL.visit(this, ((FuncDecl)funcDecl).PL);
+		} else {
+			// use scalar or array as a function
+			reporter.reportError(errMesg[19], call.I.spelling, call.position);
+			call.type = StdEnvironment.errorType;
+		}
+		return call.type;
 	}
 	
 	private boolean isValidLvalue(Expr lvalue) {
 		return false;
 	}
 	
+	// here is not finished yet
+	@Override
 	public Object visitAssignExpr(AssignExpr assign, Object o) {
 		Expr lvalue = assign.E1;
 		Expr rvalue = assign.E2;
+		if(isValidLvalue(lvalue)) {
+			Type ltype = (Type)lvalue.visit(this, null);
+			Type rtype = (Type)rvalue.visit(this, null);
+			// array cannot be lvalue and rvalue 
+			if(ltype.isArrayType() || rtype.isArrayType()) {
+				// use array as a scalar
+				reporter.reportError(errMesg[11], null, assign.position);
+				assign.type = StdEnvironment.errorType;
+			} 
+		} else {
+			reporter.reportError(errMesg[7], null, assign.position);
+		}
 		return null;
 	} 
 	
+	@Override
 	public Object visitEmptyExpr(EmptyExpr ast, Object o) {
 		ast.type = StdEnvironment.errorType;
 		return ast.type;
@@ -229,22 +293,27 @@ public final class Checker implements Visitor {
 
 	
 	// Literals, Identifiers and Operators
+	@Override
 	public Object visitIntLiteral(IntLiteral IL, Object o) {
 		return StdEnvironment.intType;
 	}
 
+	@Override
 	public Object visitFloatLiteral(FloatLiteral IL, Object o) {
 		return StdEnvironment.floatType;
 	}
 
+	@Override
 	public Object visitBooleanLiteral(BooleanLiteral SL, Object o) {
 		return StdEnvironment.booleanType;
 	}
 
+	@Override
 	public Object visitStringLiteral(StringLiteral IL, Object o) {
 		return StdEnvironment.stringType;
 	}
 
+	@Override
 	public Object visitIdent(Ident I, Object o) {
 		Decl binding = idTable.retrieve(I.spelling);
 		if (binding != null)
@@ -252,6 +321,7 @@ public final class Checker implements Visitor {
 		return binding;
 	}
 
+	@Override
 	public Object visitOperator(Operator O, Object o) {
 		return null;
 	}
@@ -264,6 +334,7 @@ public final class Checker implements Visitor {
 		return null;
 	}
 
+	@Override
 	public Object visitParaDecl(ParaDecl ast, Object o) {
 		declareVariable(ast.I, ast);
 		if (ast.T.isVoidType()) {
@@ -277,6 +348,7 @@ public final class Checker implements Visitor {
 	}
 
 	// Arguments
+	// check type of actual parameters and formal parameters are compatible or not
 	@Override
 	public Object visitArgList(ArgList list, Object o) {
 		list.A.visit(this, null);
