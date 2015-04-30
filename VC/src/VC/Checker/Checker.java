@@ -109,63 +109,17 @@ public final class Checker implements Visitor {
 		return null;
 	}
 
-	// Statements
-
-	public Object visitCompoundStmt(CompoundStmt ast, Object o) {
-		idTable.openScope();
-
-		// Your code goes here
-
-		idTable.closeScope();
-		return null;
-	}
-
-	public Object visitStmtList(StmtList ast, Object o) {
-		ast.S.visit(this, o);
-		if (ast.S instanceof ReturnStmt && ast.SL instanceof StmtList)
-			reporter.reportError(errMesg[30], "", ast.SL.position);
-		ast.SL.visit(this, o);
-		return null;
-	}
-
-
-	public Object visitExprStmt(ExprStmt ast, Object o) {
-		ast.E.visit(this, o);
-		return null;
-	}
-
-	public Object visitEmptyStmt(EmptyStmt ast, Object o) {
-		return null;
-	}
-
-	public Object visitEmptyDeclList(EmptyDeclList ast, Object o) {
-		return null;
-	}
-	
-	public Object visitEmptyStmtList(EmptyStmtList ast, Object o) {
-		return null;
-	}
-	
-	public Object visitEmptyParaList(EmptyParaList ast, Object o) {
-		return null;
-	}
-	
-	public Object visitEmptyArgList(EmptyArgList ast, Object o) {
-		return null;
-	}
-	
 	// Declarations
-	public Object visitFuncDecl(FuncDecl ast, Object o) {
-		idTable.insert (ast.I.spelling, ast); 
-
-		// Your code goes here
-
-		// HINT
-		// Pass ast as the 2nd argument (as done below) so that the
-		// formal parameters of the function an be extracted from ast when the
-		// function body is later visited
-
-		ast.S.visit(this, ast);
+	// check if it is a main function. If it is, return type must be integer
+	public Object visitFuncDecl(FuncDecl funcDecl, Object o) {
+		idTable.insert (funcDecl.I.spelling, funcDecl); 
+		if(funcDecl.I.spelling.equals("main")) {
+			if(!funcDecl.T.isIntType()) {
+				// return type of main function is not integer
+				reporter.reportError(errMesg[1], funcDecl.I.spelling, funcDecl.position);
+			}
+		}
+		funcDecl.S.visit(this, funcDecl);
 		return null;
 	}
 
@@ -175,21 +129,146 @@ public final class Checker implements Visitor {
 		return null;
 	}
 
-	public Object visitGlobalVarDecl(GlobalVarDecl ast, Object o) {
-		declareVariable(ast.I, ast);
+	public Object visitGlobalVarDecl(GlobalVarDecl globalVarDecl, Object o) {
+		declareVariable(globalVarDecl.I, globalVarDecl);
 		return null;
 		// fill the rest
 	}
 
-	public Object visitLocalVarDecl(LocalVarDecl ast, Object o) {
-		declareVariable(ast.I, ast);
+	public Object visitLocalVarDecl(LocalVarDecl localVarDecl, Object o) {
+		declareVariable(localVarDecl.I, localVarDecl);
 		return null;
 		// fill the rest
 	}
 
-	public Object visitBooleanExpr(BooleanExpr ast, Object o) {
-		ast.type = StdEnvironment.booleanType;
-		return ast.type;
+	// Statements
+	@Override
+	public Object visitIfStmt(IfStmt ifStmt, Object o) {
+		Type exprType = (Type)ifStmt.E.visit(this, null);
+		if(!exprType.isBooleanType()) {
+			// not a boolean expression 
+			reporter.reportError(errMesg[20], exprType + " appears here.", ifStmt.position);
+		}
+		ifStmt.S1.visit(this, null);
+		ifStmt.S2.visit(this, null);
+		return null;
+	}
+
+	@Override
+	public Object visitForStmt(ForStmt forStmt, Object o) {
+		forStmt.E1.visit(this, null);
+		Type exprType = (Type)forStmt.E2.visit(this,  null);
+		if(!exprType.isBooleanType()) {
+			// not a boolean expression
+			reporter.reportError(errMesg[21], exprType + " appears here.", forStmt.position);
+		}
+		forStmt.E3.visit(this, null);
+		forStmt.S.visit(this, null);
+		return null;
+	}
+
+	@Override
+	public Object visitWhileStmt(WhileStmt whileStmt, Object o) {
+		Type exprType = (Type)whileStmt.E.visit(this, null);
+		if(!exprType.isBooleanType()) {
+			// not a boolean expression 
+			reporter.reportError(errMesg[22], exprType + " appears here.", whileStmt.position);
+		}
+		whileStmt.S.visit(this, null);
+		return null;
+	}
+
+	private boolean isInWhileOrFor(AST currentParent) {
+		boolean isFound = false;
+		while(true) {
+			if(currentParent instanceof WhileStmt || currentParent instanceof ForStmt) {
+				isFound = true;
+				break;
+			} else {
+				currentParent = currentParent.parent;
+			}
+		}
+		return isFound;
+	}
+
+	// find whether break is in while or for statements along parent pointer
+	@Override
+	public Object visitBreakStmt(BreakStmt breakStmt, Object o) {
+		boolean isFound = isInWhileOrFor(breakStmt.parent);
+		if(!isFound) {
+			reporter.reportError(errMesg[23], null, breakStmt.position);
+		}
+		return null;
+	}
+
+	@Override
+	public Object visitContinueStmt(ContinueStmt continueStmt, Object o) {
+		boolean isFound = isInWhileOrFor(continueStmt.parent);
+		if(!isFound) {
+			reporter.reportError(errMesg[24], "", continueStmt.position);
+		}
+		return null;
+	}
+
+	// check type
+	@Override
+	public Object visitReturnStmt(ReturnStmt ast, Object o) {
+		return null;
+	}
+
+	@Override
+	public Object visitCompoundStmt(CompoundStmt compoundStmt, Object o) {
+		idTable.openScope();
+		compoundStmt.DL.visit(this, null);
+		compoundStmt.SL.visit(this, null);
+		idTable.closeScope();
+		return null;
+	}
+
+	@Override
+	public Object visitStmtList(StmtList ast, Object o) {
+		ast.S.visit(this, o);
+		if (ast.S instanceof ReturnStmt && ast.SL instanceof StmtList) {
+			// Unreachable statements after return statement
+			reporter.reportError(errMesg[30], "", ast.SL.position);
+		}
+		ast.SL.visit(this, o);
+		return null;
+	}
+
+	public Object visitExprStmt(ExprStmt ast, Object o) {
+		ast.E.visit(this, o);
+		return null;
+	}
+
+	@Override
+	public Object visitEmptyCompStmt(EmptyCompStmt ast, Object o) {
+		return null;
+	}
+	
+	public Object visitEmptyStmt(EmptyStmt ast, Object o) {
+		return null;
+	}
+
+	@Override
+	public Object visitEmptyExprList(EmptyExprList ast, Object o) {
+		return null;
+	}
+	
+	public Object visitEmptyDeclList(EmptyDeclList ast, Object o) {
+		return null;
+	}
+
+	public Object visitEmptyStmtList(EmptyStmtList ast, Object o) {
+		return null;
+	}
+
+	public Object visitEmptyParaList(EmptyParaList ast, Object o) {
+		return null;
+	}
+
+	public Object visitEmptyArgList(EmptyArgList ast, Object o) {
+		return null;
 	}
 
 	public Object visitIntExpr(IntExpr ast, Object o) {
@@ -203,15 +282,38 @@ public final class Checker implements Visitor {
 	}
 
 	@Override
-	public Object visitExprList(ExprList ast, Object o) {
-		
+	public Object visitBooleanExpr(BooleanExpr ast, Object o) {
+		ast.type = StdEnvironment.booleanType;
+		return ast.type;
 	}
-	
+
+	@Override
 	public Object visitStringExpr(StringExpr ast, Object o) {
 		ast.type = StdEnvironment.stringType;
 		return ast.type;
 	}
-	
+
+	@Override
+	public Object visitUnaryExpr(UnaryExpr ast, Object o) {
+		return null;
+	}
+
+	@Override
+	public Object visitBinaryExpr(BinaryExpr ast, Object o) {
+		return null;
+	}
+
+	@Override
+	public Object visitInitExpr(InitExpr ast, Object o) {
+		return null;
+	}
+
+	// array initialization list. TODO: type check, type coercion, calculate size 
+	@Override
+	public Object visitExprList(ExprList ast, Object o) {
+		return null;
+	}
+
 	@Override
 	public Object visitArrayExpr(ArrayExpr arrayExpr, Object o) {
 		Decl arrayDecl = idTable.retrieve(((SimpleVar)arrayExpr.V).I.spelling);
@@ -225,7 +327,7 @@ public final class Checker implements Visitor {
 				reporter.reportError(errMesg[12], arrayDecl.I.spelling, arrayExpr.position);
 				arrayExpr.type = StdEnvironment.errorType;
 			} 
-			
+
 			Type indexType = (Type)arrayExpr.E.visit(this, null);
 			if(!indexType.isIntType()) {
 				// array index is not an integer
@@ -236,13 +338,13 @@ public final class Checker implements Visitor {
 		return arrayExpr.type;
 	}
 
-	
+
 	@Override
 	public Object visitVarExpr(VarExpr varExpr, Object o) {
 		varExpr.type = (Type)varExpr.visit(this, null);
 		return varExpr.type;
 	}
-	
+
 	@Override
 	public Object visitCallExpr(CallExpr call, Object o) {
 		Decl funcDecl = idTable.retrieve(call.I.spelling);
@@ -253,6 +355,7 @@ public final class Checker implements Visitor {
 		} else if (funcDecl.isFuncDecl()) {
 			// fetch formal parameter list from function declaration and pass it to actual parameters
 			call.AL.visit(this, ((FuncDecl)funcDecl).PL);
+			call.type = funcDecl.T;
 		} else {
 			// use scalar or array as a function
 			reporter.reportError(errMesg[19], call.I.spelling, call.position);
@@ -260,11 +363,11 @@ public final class Checker implements Visitor {
 		}
 		return call.type;
 	}
-	
+
 	private boolean isValidLvalue(Expr lvalue) {
 		return false;
 	}
-	
+
 	// here is not finished yet
 	@Override
 	public Object visitAssignExpr(AssignExpr assign, Object o) {
@@ -276,22 +379,22 @@ public final class Checker implements Visitor {
 			// array cannot be lvalue and rvalue 
 			if(ltype.isArrayType() || rtype.isArrayType()) {
 				// use array as a scalar
-				reporter.reportError(errMesg[11], null, assign.position);
+				reporter.reportError(errMesg[11], "", assign.position);
 				assign.type = StdEnvironment.errorType;
 			} 
 		} else {
-			reporter.reportError(errMesg[7], null, assign.position);
+			reporter.reportError(errMesg[7], "", assign.position);
 		}
 		return null;
 	} 
-	
+
 	@Override
 	public Object visitEmptyExpr(EmptyExpr ast, Object o) {
 		ast.type = StdEnvironment.errorType;
 		return ast.type;
 	}
 
-	
+
 	// Literals, Identifiers and Operators
 	@Override
 	public Object visitIntLiteral(IntLiteral IL, Object o) {
@@ -348,17 +451,61 @@ public final class Checker implements Visitor {
 	}
 
 	// Arguments
-	// check type of actual parameters and formal parameters are compatible or not
+	/*
+	 * check type of actual parameters and formal parameters are compatible or not
+	 * object o is the formal parameter list
+	 * */
 	@Override
-	public Object visitArgList(ArgList list, Object o) {
-		list.A.visit(this, null);
+	public Object visitArgList(ArgList argList, Object o) {
+		List formalParaList = (ParaList)o;
+		/*
+		 * If this function is invoked, that means this function invocation has at least one actual argument.
+		 * If formal parameter list is an empty list, report too many actual argument here.
+		 * */
+		if(formalParaList.isEmptyParaList()) {
+			reporter.reportError(errMesg[25], "", argList.position);
+		}
+		argList.A.visit(this, ((ParaList)formalParaList).P);
+		argList.AL.visit(this, ((ParaList)formalParaList).PL);
 		return null;
 	}
 
+	/*
+	 * check the compatibility between the type of formal parameter and actual argument.
+	 * Object o is a formal parameter.
+	 * If formal parameter and actual argument are array type, the type of array should be assignable.
+	 * */
 	@Override
 	public Object visitArg(Arg arg, Object o) {
-		arg.E.visit(this, null);
-		arg.type = arg.E.type;
+		Decl formalParam = (Decl)o;
+		Type formalType = formalParam.T;
+		Type actualType = (Type)arg.E.visit(this, null);
+		boolean isMatch = false;
+		if(formalType.isArrayType()) {
+			if(actualType.isArrayType()) {
+				Type formalArrayType = ((ArrayType)formalType).T;
+				Type actualArrayType = ((ArrayType)actualType).T;
+				if(formalArrayType.assignable(actualArrayType)) {
+					isMatch = true;
+				} else {
+					isMatch = false;
+				}
+			} else {
+				isMatch = false;
+			}
+		} else {
+			if(actualType.assignable(formalType)) {
+				isMatch = true;
+			} else {
+				isMatch = false;
+			}
+		}
+		if(!isMatch) {
+			reporter.reportError(errMesg[27], "", arg.E.position);
+		}
+		if(actualType.equals(StdEnvironment.intType) && formalType.equals(StdEnvironment.floatType)) {
+			// convert here
+		}
 		return null;
 	}
 
@@ -389,7 +536,7 @@ public final class Checker implements Visitor {
 
 	@Override
 	public Object visitArrayType(ArrayType array, Object o) {
-		return null;
+		return array;
 	}
 
 	@Override
@@ -397,20 +544,29 @@ public final class Checker implements Visitor {
 		return StdEnvironment.errorType;
 	}
 
+	/*
+	 * variable should be declared
+	 * variable cannot be a function name
+	 * array name cannot be used alone except that it is a function actual argument
+	 * */
 	@Override
 	public Object visitSimpleVar(SimpleVar simpleVar, Object o) {
 		Decl decl = idTable.retrieve(simpleVar.I.spelling);
+		simpleVar.type = StdEnvironment.errorType;
 		if(decl == null) {
 			// undeclared identifier
 			reporter.reportError(errMesg[5], simpleVar.I.spelling, simpleVar.position);
-			return StdEnvironment.errorType;
 		} else if (decl instanceof FuncDecl) {
 			// identifier collides with function name
-			reporter.reportError(errMesg[5], simpleVar.I.spelling, simpleVar.position);
-			return StdEnvironment.errorType;
+			reporter.reportError(errMesg[11], simpleVar.I.spelling, simpleVar.position);
 		} else {
-			return decl.T;
+			simpleVar.type = decl.T;
 		}
+		// if array name are not used as a actual argument
+		if(decl.T.isArrayType() && simpleVar.parent.parent instanceof Arg) {
+			reporter.reportError(errMesg[11], decl.I.spelling, simpleVar.position);
+		}
+		return simpleVar.type;
 	}
 
 	// Creates a small AST to represent the "declaration" of each built-in
