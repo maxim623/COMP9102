@@ -135,8 +135,45 @@ public final class Checker implements Visitor {
 		// fill the rest
 	}
 
+	/*
+	 * not finish yet
+	 * */
 	public Object visitLocalVarDecl(LocalVarDecl localVarDecl, Object o) {
 		declareVariable(localVarDecl.I, localVarDecl);
+		if(localVarDecl.T.isVoidType()) {
+			// declaration cannot be void type
+			reporter.reportError(errMesg[3], localVarDecl.I.spelling, localVarDecl.position);
+		}
+		if(localVarDecl.T.isArrayType()) {
+			if(((ArrayType)localVarDecl.T).T.isVoidType()) {
+				// array cannot be void type
+				reporter.reportError(errMesg[4], localVarDecl.I.spelling, localVarDecl.position);
+			}
+			if(((ArrayType)localVarDecl.T).E.isEmptyExpr() && !(localVarDecl.E instanceof InitExpr)) {
+				// array length is not specified explicitly and without array initialization list  
+				reporter.reportError(errMesg[18], localVarDecl.I.spelling, localVarDecl.position);
+			}
+		}
+		
+		Object exprTypeOrInitLength = localVarDecl.E.visit(this, localVarDecl.T);
+		if(localVarDecl.T.isArrayType()) {
+			if(localVarDecl.E instanceof InitExpr) {
+				Integer initListLength = (Integer)exprTypeOrInitLength;
+				if(((ArrayType)localVarDecl.T).E.isEmptyExpr()) {
+					((ArrayType)localVarDecl.T).E = new IntExpr(new IntLiteral(initListLength.toString(), dummyPos), dummyPos);
+				} else {
+					Integer size = Integer.parseInt(((IntExpr)((ArrayType)localVarDecl.T).E).IL.spelling);
+					if(size < initListLength) {
+						// length of array init is larger than array size
+						reporter.reportError(errMesg[16], "", localVarDecl.E.position);
+					}
+				}
+			}
+			if(!localVarDecl.E.isEmptyExpr()) {
+				reporter.reportError(errMesg[15], "", localVarDecl.position);
+			}
+		}
+				
 		return null;
 		// fill the rest
 	}
@@ -299,41 +336,48 @@ public final class Checker implements Visitor {
 		return null;
 	}
 
+	/*
+	 * Object o is the type of parameter
+	 * if o is not array type, report error
+	 * return value is the length of init list
+	 * */
 	@Override
-	public Object visitInitExpr(InitExpr ast, Object o) {
-		return null;
+	public Object visitInitExpr(InitExpr initExpr, Object o) {
+		Type declType = (Type)o;
+		if(!declType.isArrayType()) {
+			// array initializer for scalar
+			reporter.reportError(errMesg[14], "", initExpr.position);
+			initExpr.type = StdEnvironment.errorType;
+		}
+		return initExpr.IL.visit(this, ((ArrayType)declType).T);
 	}
 
-	// array initialization list. TODO: type check, type coercion, calculate size 
+	/*
+	 * array initialization list. TODO: type check, type coercion, calculate size
+	 * return the length of expression list 
+	 * */
 	@Override
-	public Object visitExprList(ExprList ast, Object o) {
-		return null;
-	}
-
-	@Override
-	public Object visitArrayExpr(ArrayExpr arrayExpr, Object o) {
-		Decl arrayDecl = idTable.retrieve(((SimpleVar)arrayExpr.V).I.spelling);
-		if(arrayDecl == null) {
-			// array not declared
-			reporter.reportError(errMesg[5], ((SimpleVar)arrayExpr.V).I.spelling, arrayDecl.position);
-			arrayExpr.type = StdEnvironment.errorType;
-		} else {
-			if(!arrayDecl.T.isArrayType()) {
-				// declaration is not a array
-				reporter.reportError(errMesg[12], arrayDecl.I.spelling, arrayExpr.position);
-				arrayExpr.type = StdEnvironment.errorType;
-			} 
-
-			Type indexType = (Type)arrayExpr.E.visit(this, null);
-			if(!indexType.isIntType()) {
-				// array index is not an integer
-				reporter.reportError(errMesg[17], arrayDecl.I.spelling, arrayExpr.position);
-				arrayExpr.type = StdEnvironment.errorType;
+	public Object visitExprList(ExprList exprList, Object o) {
+		Type elementTpye = (Type)o;
+		exprList.E.visit(this, null);
+		if(!exprList.E.type.equals(elementTpye)) {
+			if (exprList.E.type.assignable(elementTpye)){
+				exprList.E = i2f(exprList.E);
+			} else {
+				reporter.reportError(errMesg[13], "", exprList.E.position);
 			}
 		}
-		return arrayExpr.type;
+		if((exprList.EL instanceof ExprList)) {
+			return new Integer((Integer)exprList.EL.visit(this, o)) + 1;
+		}
+		return new Integer(1);
 	}
 
+	//
+	@Override
+	public Object visitArrayExpr(ArrayExpr arrayExpr, Object o) {
+		return null;
+	}
 
 	@Override
 	public Object visitVarExpr(VarExpr varExpr, Object o) {
@@ -415,8 +459,9 @@ public final class Checker implements Visitor {
 	@Override
 	public Object visitIdent(Ident I, Object o) {
 		Decl binding = idTable.retrieve(I.spelling);
-		if (binding != null)
+		if (binding != null) {
 			I.decl = binding;
+		}
 		return binding;
 	}
 
@@ -433,13 +478,16 @@ public final class Checker implements Visitor {
 		return null;
 	}
 
+	// check formal parameters
 	@Override
 	public Object visitParaDecl(ParaDecl ast, Object o) {
 		declareVariable(ast.I, ast);
 		if (ast.T.isVoidType()) {
+			// formal parameter cannot be void type
 			reporter.reportError(errMesg[3] + ": %", ast.I.spelling, ast.I.position);
 		} else if (ast.T.isArrayType()) {
 			if (((ArrayType) ast.T).T.isVoidType()) {
+				// formal parameter can be array type, but array cannot be void type
 				reporter.reportError(errMesg[4] + ": %", ast.I.spelling, ast.I.position);
 			}
 		}
