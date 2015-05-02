@@ -116,7 +116,7 @@ public final class Checker implements Visitor {
 			reporter.reportError(errMesg[0], "", program.position);
 		} else {
 			if(((FuncDecl)mainDecl).T.isIntType()) {
-				// the return type of main is not int
+				// the return type of main is not integer
 				reporter.reportError(errMesg[1], mainDecl.I.spelling, mainDecl.position);
 			}
 		}
@@ -135,6 +135,7 @@ public final class Checker implements Visitor {
 			reporter.reportError(errMesg[2], func.id, funcDecl.position);
 		}
 		funcDecl.PL.visit(this, null);
+		// pass return type of function to return statement
 		funcDecl.S.visit(this, funcDecl.T);
 		return null;
 	}
@@ -148,7 +149,52 @@ public final class Checker implements Visitor {
 	// what is the different between global variable declaration and local? 
 	public Object visitGlobalVarDecl(GlobalVarDecl globalVarDecl, Object o) {
 		declareVariable(globalVarDecl.I, globalVarDecl);
-		
+		if(globalVarDecl.T.isVoidType()) {
+			// declaration cannot be void type
+			reporter.reportError(errMesg[3], globalVarDecl.I.spelling, globalVarDecl.position);
+		}
+		if(globalVarDecl.T.isArrayType()) {
+			ArrayType arrayType = (ArrayType)globalVarDecl.T;
+			if(arrayType.T.isVoidType()) {
+				// array cannot be void type
+				reporter.reportError(errMesg[4], globalVarDecl.I.spelling, globalVarDecl.position);
+			}
+			if(arrayType.E.isEmptyExpr() && !(globalVarDecl.E instanceof InitExpr)) {
+				// array length is not specified explicitly and without array initialization list
+				// the length of array cannot be deduced
+				reporter.reportError(errMesg[18], globalVarDecl.I.spelling, globalVarDecl.position);
+			}
+		}
+
+		Object exprTypeOrArrayLength = globalVarDecl.E.visit(this, globalVarDecl.T);
+		if(globalVarDecl.T.isArrayType()) {
+			if(globalVarDecl.E instanceof InitExpr) {
+				Integer initLength = (Integer)exprTypeOrArrayLength;
+				if(((ArrayType)globalVarDecl.T).E.isEmptyExpr()) {
+					// use the length of initializer as the length of array
+					((ArrayType)globalVarDecl.T).E = new IntExpr(new IntLiteral(initLength.toString(), dummyPos), dummyPos);
+				} else {
+					Integer declarLength = Integer.parseInt(((IntExpr)((ArrayType)globalVarDecl.T).E).IL.spelling);
+					if(declarLength < initLength) {
+						// length of array init is larger than array size
+						reporter.reportError(errMesg[16], "", globalVarDecl.E.position);
+					}
+				}
+			}
+			if(!globalVarDecl.E.isEmptyExpr()) {
+				// use not a array initializer to initialize array
+				reporter.reportError(errMesg[15], "", globalVarDecl.position);
+			}
+		} else {
+			if(globalVarDecl.T.assignable(globalVarDecl.E.type)) {
+				if(!globalVarDecl.T.equals(globalVarDecl.E.type)) {
+					globalVarDecl.E = i2f(globalVarDecl.E);
+				}
+			} else {
+				// bad initializer
+				reporter.reportError(errMesg[6], "", globalVarDecl.E.position);
+			}
+		}
 		return null;
 	}
 
@@ -164,16 +210,18 @@ public final class Checker implements Visitor {
 				reporter.reportError(errMesg[4], localVarDecl.I.spelling, localVarDecl.position);
 			}
 			if(((ArrayType)localVarDecl.T).E.isEmptyExpr() && !(localVarDecl.E instanceof InitExpr)) {
-				// array length is not specified explicitly and without array initialization list  
+				// array length is not specified explicitly and without array initialization list
+				// the length of array cannot be deduced
 				reporter.reportError(errMesg[18], localVarDecl.I.spelling, localVarDecl.position);
 			}
 		}
-		
+		// pass the variable declaration type to initializer
 		Object exprTypeOrInitLength = localVarDecl.E.visit(this, localVarDecl.T);
 		if(localVarDecl.T.isArrayType()) {
 			if(localVarDecl.E instanceof InitExpr) {
 				Integer initListLength = (Integer)exprTypeOrInitLength;
 				if(((ArrayType)localVarDecl.T).E.isEmptyExpr()) {
+					// use the length of initializer as the length of array
 					((ArrayType)localVarDecl.T).E = new IntExpr(new IntLiteral(initListLength.toString(), dummyPos), dummyPos);
 				} else {
 					Integer size = Integer.parseInt(((IntExpr)((ArrayType)localVarDecl.T).E).IL.spelling);
@@ -193,6 +241,7 @@ public final class Checker implements Visitor {
 					localVarDecl.E = i2f(localVarDecl.E);
 				}
 			} else {
+				// bad initializer
 				reporter.reportError(errMesg[6], "", localVarDecl.E.position);
 			}
 		}
@@ -207,8 +256,9 @@ public final class Checker implements Visitor {
 			// not a boolean expression 
 			reporter.reportError(errMesg[20], exprType + " appears here.", ifStmt.position);
 		}
-		ifStmt.S1.visit(this, null);
-		ifStmt.S2.visit(this, null);
+		// Object o is the return type of function that this statement belongs to
+		ifStmt.S1.visit(this, o);
+		ifStmt.S2.visit(this, o);
 		return null;
 	}
 
@@ -220,8 +270,8 @@ public final class Checker implements Visitor {
 			// not a boolean expression
 			reporter.reportError(errMesg[21], exprType + " appears here.", forStmt.position);
 		}
-		forStmt.E3.visit(this, null);
-		forStmt.S.visit(this, null);
+		forStmt.E3.visit(this, o);
+		forStmt.S.visit(this, o);
 		return null;
 	}
 
@@ -232,10 +282,11 @@ public final class Checker implements Visitor {
 			// not a boolean expression 
 			reporter.reportError(errMesg[22], exprType + " appears here.", whileStmt.position);
 		}
-		whileStmt.S.visit(this, null);
+		whileStmt.S.visit(this, o);
 		return null;
 	}
 
+	// find whether break is in while or for statements along parent pointer
 	private boolean isInWhileOrFor(AST currentParent) {
 		boolean isFound = false;
 		while(true) {
@@ -249,7 +300,6 @@ public final class Checker implements Visitor {
 		return isFound;
 	}
 
-	// find whether break is in while or for statements along parent pointer
 	@Override
 	public Object visitBreakStmt(BreakStmt breakStmt, Object o) {
 		boolean isFound = isInWhileOrFor(breakStmt.parent);
@@ -286,7 +336,8 @@ public final class Checker implements Visitor {
 	public Object visitCompoundStmt(CompoundStmt compoundStmt, Object o) {
 		idTable.openScope();
 		compoundStmt.DL.visit(this, null);
-		compoundStmt.SL.visit(this, null);
+		// Object o is function return type
+		compoundStmt.SL.visit(this, o);
 		idTable.closeScope();
 		return null;
 	}
@@ -294,7 +345,7 @@ public final class Checker implements Visitor {
 	@Override
 	public Object visitStmtList(StmtList ast, Object o) {
 		ast.S.visit(this, o);
-		if (ast.S instanceof ReturnStmt && ast.SL instanceof StmtList) {
+		if (ast.S instanceof ReturnStmt && !ast.SL.isEmptyStmtList()) {
 			// Unreachable statements after return statement
 			reporter.reportError(errMesg[30], "", ast.SL.position);
 		}
@@ -311,7 +362,7 @@ public final class Checker implements Visitor {
 	public Object visitEmptyCompStmt(EmptyCompStmt ast, Object o) {
 		return null;
 	}
-	
+
 	public Object visitEmptyStmt(EmptyStmt ast, Object o) {
 		return null;
 	}
@@ -320,7 +371,7 @@ public final class Checker implements Visitor {
 	public Object visitEmptyExprList(EmptyExprList ast, Object o) {
 		return null;
 	}
-	
+
 	public Object visitEmptyDeclList(EmptyDeclList ast, Object o) {
 		return null;
 	}
@@ -355,14 +406,104 @@ public final class Checker implements Visitor {
 		return ast.type;
 	}
 
+	/*
+	 * in VC, unary operators includes +, - and !
+	 * + and - can be apply to integer and float, and ! can be apply to boolean type
+	 * and ! need to be converted to i!
+	 * */
 	@Override
-	public Object visitUnaryExpr(UnaryExpr ast, Object o) {
-		return null;
+	public Object visitUnaryExpr(UnaryExpr unaryExpr, Object o) {
+		Type exprType = (Type)unaryExpr.E.visit(this, null);
+		String op = unaryExpr.O.spelling;
+		if(op.equals("+") || op.equals("-")) {
+			if(exprType.isIntType() || exprType.isFloatType()) {
+				unaryExpr.type = exprType;
+			} else {
+				// apply + and - to wrong type
+				reporter.reportError(errMesg[10], unaryExpr.O.spelling, unaryExpr.position);
+				unaryExpr.type = StdEnvironment.errorType;
+			}
+		}
+		if(op.equals("!")) {
+			if(exprType.isBooleanType()) {
+				unaryExpr.O.spelling = "i" + unaryExpr.O.spelling;
+				unaryExpr.type = exprType;
+			} else {
+				// apply ! to wrong type
+				reporter.reportError(errMesg[10], unaryExpr.O.spelling, unaryExpr.position);
+				unaryExpr.type = StdEnvironment.errorType;
+			}
+		}
+		return unaryExpr.type;
 	}
 
+	/*
+	 * check the compatibility between two operands
+	 * apply type coercion
+	 * apply operator overloading
+	 * */
 	@Override
-	public Object visitBinaryExpr(BinaryExpr ast, Object o) {
-		return null;
+	public Object visitBinaryExpr(BinaryExpr binaryExpr, Object o) {
+		Type e1Type = (Type)binaryExpr.E1.visit(this, null);
+		Type e2Type = (Type)binaryExpr.E2.visit(this, null);
+		if(e1Type.equals(e2Type)) {
+			binaryExpr.type = e2Type;
+		} else if(e1Type.isFloatType() && e2Type.isIntType()) {
+			binaryExpr.E1 = i2f(binaryExpr.E1);
+			binaryExpr.type = StdEnvironment.floatType;
+		} else if(e1Type.isIntType() && e2Type.isFloatType()) {
+			binaryExpr.E2 = i2f(binaryExpr.E2);
+			binaryExpr.type = StdEnvironment.floatType;
+		} else {
+			reporter.reportError(errMesg[9], binaryExpr.O.spelling, binaryExpr.O.position);
+			binaryExpr.type = StdEnvironment.errorType;
+		}
+
+		boolean convert2Int = false;
+		boolean convert2Float = false;
+		boolean reportError = false;
+
+		// next apply operator overloading
+		if(!binaryExpr.type.isErrorType()) {
+			String op = binaryExpr.O.spelling;
+			if(op.equals("+") || op.equals("-") || op.equals("*") || op.equals("/") ||
+					op.equals(">") || op.equals(">=") || op.equals("<")|| op.equals("<=")) {
+				if(binaryExpr.type.isIntType()) {
+					convert2Int = true;
+				} else if(binaryExpr.type.isFloatType()) {
+					convert2Float = true;
+				} else {
+					reportError = true;
+				}
+			} 
+			if(op.equals("&&") || op.equals("||")) {
+				if(binaryExpr.type.isBooleanType()) {
+					convert2Int = true;
+				} else {
+					reportError = true;
+				}
+			}
+			if(op.equals("==") || op.equals("!=")) {
+				if(binaryExpr.type.isIntType() || binaryExpr.type.isBooleanType()) {
+					convert2Int = true;
+				} else if(binaryExpr.type.isFloatType()) {
+					convert2Float = true;
+				} else {
+					reportError = true;
+				}
+			}
+		}
+		if(convert2Int) {
+			binaryExpr.O.spelling = "i" + binaryExpr.O.spelling;
+		}
+		if(convert2Float) {
+			binaryExpr.O.spelling = "f" + binaryExpr.O.spelling;
+		}
+		if(reportError) {
+			reporter.reportError(errMesg[9], binaryExpr.O.spelling, binaryExpr.O.position);
+			binaryExpr.type = StdEnvironment.errorType;
+		}
+		return binaryExpr.type;
 	}
 
 	/*
@@ -590,7 +731,7 @@ public final class Checker implements Visitor {
 		}
 		return null;
 	}
-	
+
 	/*
 	 * Check the too few actual argument
 	 * object o is formal parameter list. If it is not empty, report error.
@@ -673,7 +814,7 @@ public final class Checker implements Visitor {
 		idTable.insert (id, binding);
 		return binding;
 	}
-	
+
 	private Expr i2f(Expr currentExpr) {
 		Expr newExpr = new UnaryExpr(new Operator("i2f", currentExpr.position), currentExpr, currentExpr.position);
 		newExpr.type = StdEnvironment.floatType;
@@ -681,7 +822,7 @@ public final class Checker implements Visitor {
 		currentExpr.parent = newExpr;
 		return newExpr;
 	}
-	
+
 	// Creates small ASTs to represent "declarations" of all 
 	// build-in functions.
 	// Inserts these "declarations" into the symbol table.
