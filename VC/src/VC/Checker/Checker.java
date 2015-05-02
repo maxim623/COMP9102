@@ -103,23 +103,39 @@ public final class Checker implements Visitor {
 		idTable.insert(ident.spelling, decl);
 	}
 
-	// Programs
-	public Object visitProgram(Program ast, Object o) {
-		ast.FL.visit(this, null);
+	/*
+	 * check if there is main function or not
+	 * check the return type of main function
+	 * */
+	@Override
+	public Object visitProgram(Program program, Object o) {
+		program.FL.visit(this, null);
+		Decl mainDecl = idTable.retrieve("main");
+		if(mainDecl == null || !mainDecl.isFuncDecl()) {
+			// no main function
+			reporter.reportError(errMesg[0], "", program.position);
+		} else {
+			if(((FuncDecl)mainDecl).T.isIntType()) {
+				// the return type of main is not int
+				reporter.reportError(errMesg[1], mainDecl.I.spelling, mainDecl.position);
+			}
+		}
 		return null;
 	}
 
-	// Declarations
-	// check if it is a main function. If it is, return type must be integer
+	/*
+	 * check function name redeclaration
+	 * pass return type to statement list so that return statement can check return type is compatible or not
+	 * */
+	@Override
 	public Object visitFuncDecl(FuncDecl funcDecl, Object o) {
-		idTable.insert (funcDecl.I.spelling, funcDecl); 
-		if(funcDecl.I.spelling.equals("main")) {
-			if(!funcDecl.T.isIntType()) {
-				// return type of main function is not integer
-				reporter.reportError(errMesg[1], funcDecl.I.spelling, funcDecl.position);
-			}
+		IdEntry func = idTable.retrieveOneLevel(funcDecl.I.spelling);
+		if(func != null) {
+			// duplicate function name
+			reporter.reportError(errMesg[2], func.id, funcDecl.position);
 		}
-		funcDecl.S.visit(this, funcDecl);
+		funcDecl.PL.visit(this, null);
+		funcDecl.S.visit(this, funcDecl.T);
 		return null;
 	}
 
@@ -129,15 +145,13 @@ public final class Checker implements Visitor {
 		return null;
 	}
 
+	// what is the different between global variable declaration and local? 
 	public Object visitGlobalVarDecl(GlobalVarDecl globalVarDecl, Object o) {
 		declareVariable(globalVarDecl.I, globalVarDecl);
+		
 		return null;
-		// fill the rest
 	}
 
-	/*
-	 * not finish yet
-	 * */
 	public Object visitLocalVarDecl(LocalVarDecl localVarDecl, Object o) {
 		declareVariable(localVarDecl.I, localVarDecl);
 		if(localVarDecl.T.isVoidType()) {
@@ -170,12 +184,19 @@ public final class Checker implements Visitor {
 				}
 			}
 			if(!localVarDecl.E.isEmptyExpr()) {
+				// use not a array initializer to initialize array
 				reporter.reportError(errMesg[15], "", localVarDecl.position);
 			}
+		} else {
+			if(localVarDecl.T.assignable(localVarDecl.E.type)) {
+				if(!localVarDecl.T.equals(localVarDecl.E.type)) {
+					localVarDecl.E = i2f(localVarDecl.E);
+				}
+			} else {
+				reporter.reportError(errMesg[6], "", localVarDecl.E.position);
+			}
 		}
-				
 		return null;
-		// fill the rest
 	}
 
 	// Statements
@@ -247,9 +268,17 @@ public final class Checker implements Visitor {
 		return null;
 	}
 
-	// check type
+	// check function return type is compatible with the type of return statement
+	// Object o is the type of function return type
 	@Override
-	public Object visitReturnStmt(ReturnStmt ast, Object o) {
+	public Object visitReturnStmt(ReturnStmt retStmt, Object o) {
+		Type funcRetType = (Type)o;
+		Type retExprType = (Type)retStmt.E.visit(this, null);
+		if(retExprType.assignable(funcRetType)) {
+			retStmt.E = i2f(retStmt.E);
+		} else {
+			reporter.reportError(errMesg[8], "", retStmt.position);
+		}
 		return null;
 	}
 
@@ -360,12 +389,12 @@ public final class Checker implements Visitor {
 	public Object visitExprList(ExprList exprList, Object o) {
 		Type elementTpye = (Type)o;
 		exprList.E.visit(this, null);
-		if(!exprList.E.type.equals(elementTpye)) {
-			if (exprList.E.type.assignable(elementTpye)){
+		if(exprList.E.type.assignable(elementTpye)) {
+			if(!exprList.E.type.equals(elementTpye)) {
 				exprList.E = i2f(exprList.E);
-			} else {
-				reporter.reportError(errMesg[13], "", exprList.E.position);
 			}
+		} else {
+			reporter.reportError(errMesg[13], "", exprList.E.position);
 		}
 		if((exprList.EL instanceof ExprList)) {
 			return new Integer((Integer)exprList.EL.visit(this, o)) + 1;
@@ -373,10 +402,24 @@ public final class Checker implements Visitor {
 		return new Integer(1);
 	}
 
-	//
+	// check whether the variable is declared as a array
+	// check index expression is integer or not 
 	@Override
 	public Object visitArrayExpr(ArrayExpr arrayExpr, Object o) {
-		return null;
+		Type varType = (Type)arrayExpr.V.visit(this, null);
+		arrayExpr.type = StdEnvironment.errorType;
+		if(!varType.isArrayType()) {
+			// variable not declared as array
+			reporter.reportError(errMesg[12], ((SimpleVar)arrayExpr.V).I.spelling, arrayExpr.V.position);
+		} else {
+			arrayExpr.type = ((ArrayType)varType).T;
+		}
+		Type exprType = (Type)arrayExpr.E.visit(this, null);
+		if(!exprType.isIntType()) {
+			// index expression is not a integer
+			reporter.reportError(errMesg[17], ((SimpleVar)arrayExpr.V).I.spelling, arrayExpr.E.position);
+		}
+		return arrayExpr.type;
 	}
 
 	@Override
