@@ -106,8 +106,8 @@ public final class Checker implements Visitor {
 	}
 
 	/*
-	 * check if there is main function or not check the return type of main
-	 * function
+	 * check if there is main function or not 
+	 * check the return type of main function
 	 */
 	@Override
 	public Object visitProgram(Program program, Object o) {
@@ -119,7 +119,7 @@ public final class Checker implements Visitor {
 		} else {
 			if (!((FuncDecl) mainDecl).T.isIntType()) {
 				// the return type of main is not integer
-				reporter.reportError(errMesg[1], mainDecl.I.spelling,mainDecl.position);
+				reporter.reportError(errMesg[1], "", mainDecl.position);
 			}
 		}
 		return null;
@@ -134,7 +134,7 @@ public final class Checker implements Visitor {
 		IdEntry func = idTable.retrieveOneLevel(funcDecl.I.spelling);
 		if (func != null) {
 			// duplicate function name
-			reporter.reportError(errMesg[2], func.id, funcDecl.position);
+			reporter.reportError(errMesg[2] + ": %", func.id, funcDecl.position);
 		} else {
 			idTable.insert(funcDecl.I.spelling, funcDecl);
 		}
@@ -142,18 +142,26 @@ public final class Checker implements Visitor {
 		 * Currently parameter list cannot be visited because if parameter list
 		 * is visited here, the scope of parameters will be in the same scope as
 		 * function. However, the scope of parameters begins from compound
-		 * statement. So, visiting parameter list should be postponed to
-		 * visiting compound statement.
+		 * statement to the end of function. So, visiting parameter list should be 
+		 * postponed to visiting compound statement.
 		 */
 		// funcDecl.PL.visit(this, null);
-		// pass return type of function to return statement
+		// pass declaration of function to return statement
 		funcDecl.S.visit(this, funcDecl);
+		/*
+		 * check whether the function with return value has corresponding return statement.
+		 * when checker visit return statement, it will put the function declaration with
+		 * return statement to a vector. Now check whether current function is in this vector.
+		 * If in, that means this function has corresponding return statement.
+		 * If not, checker reports error that function has no return statement.
+		 * */
 		if (!funcDecl.T.isVoidType() && !functionHasRet.contains(funcDecl)) {
-			reporter.reportError(errMesg[31], funcDecl.I.spelling,funcDecl.position);
+			reporter.reportError(errMesg[31] + ": function % need a return statement.", funcDecl.I.spelling, funcDecl.position);
 		}
 		return null;
 	}
 
+	@Override
 	public Object visitDeclList(DeclList ast, Object o) {
 		ast.D.visit(this, null);
 		ast.DL.visit(this, null);
@@ -161,24 +169,24 @@ public final class Checker implements Visitor {
 	}
 
 	// what is the different between global variable declaration and local?
+	@Override
 	public Object visitGlobalVarDecl(GlobalVarDecl globalVarDecl, Object o) {
 		declareVariable(globalVarDecl.I, globalVarDecl);
 		if (globalVarDecl.T.isVoidType()) {
 			// declaration cannot be void type
-			reporter.reportError(errMesg[3], globalVarDecl.I.spelling,globalVarDecl.position);
+			reporter.reportError(errMesg[3] + ": variable % declared as void", globalVarDecl.I.spelling, globalVarDecl.position);
 		}
 		if (globalVarDecl.T.isArrayType()) {
 			ArrayType arrayType = (ArrayType) globalVarDecl.T;
 			if (arrayType.T.isVoidType()) {
 				// array cannot be void type
-				reporter.reportError(errMesg[4], globalVarDecl.I.spelling,globalVarDecl.position);
+				reporter.reportError(errMesg[4] + ": array % declared as void", globalVarDecl.I.spelling,globalVarDecl.position);
 			}
-			if (arrayType.E.isEmptyExpr()
-					&& !(globalVarDecl.E instanceof InitExpr)) {
-				// array length is not specified explicitly and without array
-				// initialization list
+			if (arrayType.E.isEmptyExpr() && !(globalVarDecl.E instanceof InitExpr)) {
+				// array length is not specified explicitly and without array initialization list
 				// the length of array cannot be deduced
-				reporter.reportError(errMesg[18], globalVarDecl.I.spelling,globalVarDecl.position);
+				reporter.reportError(errMesg[18] + ": cannot determined the length of array %", 
+						globalVarDecl.I.spelling, globalVarDecl.position);
 			}
 		}
 
@@ -190,16 +198,15 @@ public final class Checker implements Visitor {
 					// use the length of initializer as the length of array
 					((ArrayType) globalVarDecl.T).E = new IntExpr(new IntLiteral(initLength.toString(), dummyPos),dummyPos);
 				} else {
-					Integer declarLength = Integer
-							.parseInt(((IntExpr) ((ArrayType) globalVarDecl.T).E).IL.spelling);
+					Integer declarLength = Integer.parseInt(((IntExpr) ((ArrayType) globalVarDecl.T).E).IL.spelling);
 					if (declarLength < initLength) {
 						// length of array init is larger than array size
-						reporter.reportError(errMesg[16], "",globalVarDecl.E.position);
+						reporter.reportError(errMesg[16] + ": array %", globalVarDecl.I.spelling, globalVarDecl.E.position);
 					}
 				}
 			} else if (!globalVarDecl.E.isEmptyExpr()) {
 				// use not a array initializer to initialize array
-				reporter.reportError(errMesg[15], "", globalVarDecl.position);
+				reporter.reportError(errMesg[15] + ": array %", globalVarDecl.I.spelling, globalVarDecl.position);
 			}
 		} else {
 			if (globalVarDecl.T.assignable(globalVarDecl.E.type)) {
@@ -218,19 +225,20 @@ public final class Checker implements Visitor {
 		declareVariable(localVarDecl.I, localVarDecl);
 		if (localVarDecl.T.isVoidType()) {
 			// declaration cannot be void type
-			reporter.reportError(errMesg[3], localVarDecl.I.spelling,localVarDecl.position);
+			reporter.reportError(errMesg[3] + ": variable % declared as void", localVarDecl.I.spelling, localVarDecl.position);
 		}
 		if (localVarDecl.T.isArrayType()) {
 			if (((ArrayType) localVarDecl.T).T.isVoidType()) {
 				// array cannot be void type
-				reporter.reportError(errMesg[4], localVarDecl.I.spelling,localVarDecl.position);
+				reporter.reportError(errMesg[4] + ": array % declared as void", localVarDecl.I.spelling,localVarDecl.position);
 			}
 			if (((ArrayType) localVarDecl.T).E.isEmptyExpr()
 					&& !(localVarDecl.E instanceof InitExpr)) {
 				// array length is not specified explicitly and without array
 				// initialization list
 				// the length of array cannot be deduced
-				reporter.reportError(errMesg[18], localVarDecl.I.spelling,localVarDecl.position);
+				reporter.reportError(errMesg[18] + ": cannot determined the length of array %", 
+						localVarDecl.I.spelling, localVarDecl.position);
 			}
 		}
 		// pass the variable declaration type to initializer
@@ -245,12 +253,12 @@ public final class Checker implements Visitor {
 					Integer size = Integer.parseInt(((IntExpr) ((ArrayType) localVarDecl.T).E).IL.spelling);
 					if (size < initListLength) {
 						// length of array init is larger than array size
-						reporter.reportError(errMesg[16], "",localVarDecl.E.position);
+						reporter.reportError(errMesg[16] + ": array %", localVarDecl.I.spelling, localVarDecl.E.position);
 					}
 				}
 			} else if (!localVarDecl.E.isEmptyExpr()) {
 				// use not a array initializer to initialize array
-				reporter.reportError(errMesg[15], "", localVarDecl.position);
+				reporter.reportError(errMesg[15] + ": array %", localVarDecl.I.spelling, localVarDecl.position);
 			}
 		} else {
 			if (localVarDecl.T.assignable(localVarDecl.E.type)) {
@@ -271,10 +279,9 @@ public final class Checker implements Visitor {
 		Type exprType = (Type) ifStmt.E.visit(this, null);
 		if (!exprType.isBooleanType()) {
 			// not a boolean expression
-			reporter.reportError(errMesg[20], exprType + " appears here.",ifStmt.position);
+			reporter.reportError(errMesg[20] + ": % appears here", exprType.toString(), ifStmt.position);
 		}
-		// Object o is the declaration of function that this statement belongs
-		// to
+		// Object o is the declaration of function that this statement belongs to
 		ifStmt.S1.visit(this, o);
 		ifStmt.S2.visit(this, o);
 		return null;
@@ -286,7 +293,7 @@ public final class Checker implements Visitor {
 		Type exprType = (Type) forStmt.E2.visit(this, null);
 		if (!forStmt.E2.isEmptyExpr() && !exprType.isBooleanType()) {
 			// not a boolean expression
-			reporter.reportError(errMesg[21], exprType + " appears here.",forStmt.position);
+			reporter.reportError(errMesg[21] + ": % appears here", exprType.toString(), forStmt.position);
 		}
 		forStmt.E3.visit(this, null);
 		forStmt.S.visit(this, o);
@@ -298,7 +305,7 @@ public final class Checker implements Visitor {
 		Type exprType = (Type) whileStmt.E.visit(this, null);
 		if (!exprType.isBooleanType()) {
 			// not a boolean expression
-			reporter.reportError(errMesg[22], exprType + " appears here.",whileStmt.position);
+			reporter.reportError(errMesg[22] + ": % appears here", exprType.toString(), whileStmt.position);
 		}
 		whileStmt.S.visit(this, o);
 		return null;
@@ -328,7 +335,7 @@ public final class Checker implements Visitor {
 	public Object visitBreakStmt(BreakStmt breakStmt, Object o) {
 		boolean isFound = isInWhileOrFor(breakStmt.parent);
 		if (!isFound) {
-			reporter.reportError(errMesg[23], null, breakStmt.position);
+			reporter.reportError(errMesg[23], "", breakStmt.position);
 		}
 		return null;
 	}
@@ -349,22 +356,26 @@ public final class Checker implements Visitor {
 	public Object visitReturnStmt(ReturnStmt retStmt, Object o) {
 		Type funcRetType = ((FuncDecl) o).T;
 		Type retExprType = (Type) retStmt.E.visit(this, null);
+		boolean hasCorrectRet = false;
+		// xor logic
 		if (funcRetType.isVoidType() ^ retStmt.E.isEmptyExpr()) {
-			reporter.reportError(errMesg[8], "", retStmt.position);
+			reporter.reportError(errMesg[8] + ": Declared return type is %", funcRetType.toString(), retStmt.position);
 		}
 		if (!funcRetType.isVoidType()) {
 			if (funcRetType.assignable(retExprType)) {
+				hasCorrectRet = true;
 				if (!funcRetType.equals(retExprType)) {
 					retStmt.E = i2f(retStmt.E);
 				}
 			} else {
-				reporter.reportError(errMesg[8], "", retStmt.position);
+				reporter.reportError(errMesg[8] + ": Declared return type is %", funcRetType.toString(), retStmt.position);
+				hasCorrectRet = false;
 			}
-			// that means this function needs to return statement and it has
-			// return statement
+		}
+		if(hasCorrectRet) {
+			// that means this function does not have return statement or it has incorrect return statement
 			functionHasRet.add((FuncDecl) o);
 		}
-
 		return null;
 	}
 
@@ -466,7 +477,7 @@ public final class Checker implements Visitor {
 				unaryExpr.type = exprType;
 			} else {
 				// apply + and - to wrong type
-				reporter.reportError(errMesg[10], unaryExpr.O.spelling,	unaryExpr.position);
+				reporter.reportError(errMesg[10] + ": incompatible type %", unaryExpr.O.spelling, unaryExpr.position);
 				unaryExpr.type = StdEnvironment.errorType;
 			}
 		}
@@ -476,7 +487,7 @@ public final class Checker implements Visitor {
 				unaryExpr.type = exprType;
 			} else {
 				// apply ! to wrong type
-				reporter.reportError(errMesg[10], unaryExpr.O.spelling,	unaryExpr.position);
+				reporter.reportError(errMesg[10] + ": incompatible type %", unaryExpr.O.spelling,	unaryExpr.position);
 				unaryExpr.type = StdEnvironment.errorType;
 			}
 		}
@@ -506,7 +517,7 @@ public final class Checker implements Visitor {
 		} else if(e1Type.isBooleanType() && e2Type.isBooleanType()) {
 			binaryExpr.type = StdEnvironment.booleanType;
 		} else {
-			reporter.reportError(errMesg[9], binaryExpr.O.spelling,	binaryExpr.O.position);
+			reporter.reportError(errMesg[9] + ": incompatible type %", binaryExpr.O.spelling, binaryExpr.O.position);
 			binaryExpr.type = StdEnvironment.errorType;
 		}
 		boolean convert2IntOp = false;
@@ -561,7 +572,7 @@ public final class Checker implements Visitor {
 			binaryExpr.O.spelling = "f" + binaryExpr.O.spelling;
 		}
 		if (reportError) {
-			reporter.reportError(errMesg[9], binaryExpr.O.spelling,	binaryExpr.O.position);
+			reporter.reportError(errMesg[9] + ": incompatible type %", binaryExpr.O.spelling, binaryExpr.O.position);
 			binaryExpr.type = StdEnvironment.errorType;
 		}
 		return binaryExpr.type;
@@ -613,14 +624,15 @@ public final class Checker implements Visitor {
 		arrayExpr.type = StdEnvironment.errorType;
 		if (!varType.isArrayType()) {
 			// variable not declared as array
-			reporter.reportError(errMesg[12], ((SimpleVar) arrayExpr.V).I.spelling, arrayExpr.V.position);
+			reporter.reportError(errMesg[12] + ": % is not an array", ((SimpleVar) arrayExpr.V).I.spelling, arrayExpr.V.position);
 		} else {
 			arrayExpr.type = ((ArrayType) varType).T;
 		}
 		Type exprType = (Type) arrayExpr.E.visit(this, null);
 		if (!exprType.isIntType()) {
 			// index expression is not a integer
-			reporter.reportError(errMesg[17], ((SimpleVar) arrayExpr.V).I.spelling, arrayExpr.E.position);
+			reporter.reportError(errMesg[17] + ": index of array % is not integer",
+					((SimpleVar) arrayExpr.V).I.spelling, arrayExpr.E.position);
 		}
 		return arrayExpr.type;
 	}
@@ -636,7 +648,7 @@ public final class Checker implements Visitor {
 		Decl funcDecl = idTable.retrieve(call.I.spelling);
 		if (funcDecl == null) {
 			// cannot find symbol
-			reporter.reportError(errMesg[5], call.I.spelling, call.position);
+			reporter.reportError(errMesg[5] + ": % is undeclared", call.I.spelling, call.position);
 			call.type = StdEnvironment.errorType;
 		} else if (funcDecl.isFuncDecl()) {
 			// fetch formal parameter list from function declaration and pass it
@@ -645,7 +657,7 @@ public final class Checker implements Visitor {
 			call.type = funcDecl.T;
 		} else {
 			// use scalar or array as a function
-			reporter.reportError(errMesg[19], call.I.spelling, call.position);
+			reporter.reportError(errMesg[19] + ": % is not a function", call.I.spelling, call.position);
 			call.type = StdEnvironment.errorType;
 		}
 		return call.type;
@@ -664,7 +676,7 @@ public final class Checker implements Visitor {
 			Decl decl = idTable.retrieve(((SimpleVar)((VarExpr)assignExpr.E1).V).I.spelling);
 			if (decl instanceof FuncDecl) {
 				// function cannot be assigned
-				reporter.reportError(errMesg[7], "", assignExpr.E1.position);
+				reporter.reportError(errMesg[7] + ": % is declared as a function", decl.I.spelling, assignExpr.E1.position);
 				assignExpr.type = StdEnvironment.errorType;
 			}
 			// here we do not need to check the lvalue is an array since this is checked in visitSimpleVar
@@ -742,13 +754,12 @@ public final class Checker implements Visitor {
 		declareVariable(ast.I, ast);
 		if (ast.T.isVoidType()) {
 			// formal parameter cannot be void type
-			reporter.reportError(errMesg[3] + ": %", ast.I.spelling,
-					ast.I.position);
+			reporter.reportError(errMesg[3] + ": % cannot be void", ast.I.spelling, ast.I.position);
 		} else if (ast.T.isArrayType()) {
 			if (((ArrayType) ast.T).T.isVoidType()) {
 				// formal parameter can be array type, but array cannot be void
 				// type
-				reporter.reportError(errMesg[4] + ": %", ast.I.spelling, ast.I.position);
+				reporter.reportError(errMesg[4] + ": % cannot be void", ast.I.spelling, ast.I.position);
 			}
 		}
 		return null;
@@ -869,16 +880,16 @@ public final class Checker implements Visitor {
 		simpleVar.type = StdEnvironment.errorType;
 		if (decl == null) {
 			// undeclared identifier
-			reporter.reportError(errMesg[5], simpleVar.I.spelling, simpleVar.I.position);
+			reporter.reportError(errMesg[5] + ": % is undeclared", simpleVar.I.spelling, simpleVar.I.position);
 		} else if (decl instanceof FuncDecl) {
 			// identifier collides with function name
-			reporter.reportError(errMesg[11], simpleVar.I.spelling,	simpleVar.I.position);
+			reporter.reportError(errMesg[11] + ": % is not a scalar", simpleVar.I.spelling, simpleVar.I.position);
 		} else {
 			simpleVar.type = decl.T;
 		}
 		// if array name are not used as a actual argument
 		if (simpleVar.type.isArrayType() && simpleVar.parent instanceof VarExpr && !(simpleVar.parent.parent instanceof Arg)) {
-			reporter.reportError(errMesg[11], decl.I.spelling, simpleVar.position);
+			reporter.reportError(errMesg[11] + ": % is not a scalar", decl.I.spelling, simpleVar.position);
 		}
 		return simpleVar.type;
 	}
