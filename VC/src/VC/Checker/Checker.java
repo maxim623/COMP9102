@@ -134,9 +134,15 @@ public final class Checker implements Visitor {
 			// duplicate function name
 			reporter.reportError(errMesg[2], func.id, funcDecl.position);
 		}
-		funcDecl.PL.visit(this, null);
+		/* 
+		 * Currently parameter list cannot be visited because if parameter list is visited here,
+		 * the scope of parameters will be in the same scope as function. However, the scope of 
+		 * parameters begins from compound statement. So, visiting parameter list should be postponed 
+		 * to visiting compound statement.
+		 * */
+		//funcDecl.PL.visit(this, null);
 		// pass return type of function to return statement
-		funcDecl.S.visit(this, funcDecl.T);
+		funcDecl.S.visit(this, funcDecl);
 		return null;
 	}
 
@@ -256,7 +262,7 @@ public final class Checker implements Visitor {
 			// not a boolean expression 
 			reporter.reportError(errMesg[20], exprType + " appears here.", ifStmt.position);
 		}
-		// Object o is the return type of function that this statement belongs to
+		// Object o is the declaration of function that this statement belongs to
 		ifStmt.S1.visit(this, o);
 		ifStmt.S2.visit(this, o);
 		return null;
@@ -266,11 +272,11 @@ public final class Checker implements Visitor {
 	public Object visitForStmt(ForStmt forStmt, Object o) {
 		forStmt.E1.visit(this, null);
 		Type exprType = (Type)forStmt.E2.visit(this,  null);
-		if(!exprType.isBooleanType()) {
+		if(!forStmt.E2.isEmptyExpr() && !exprType.isBooleanType()) {
 			// not a boolean expression
 			reporter.reportError(errMesg[21], exprType + " appears here.", forStmt.position);
 		}
-		forStmt.E3.visit(this, o);
+		forStmt.E3.visit(this, null);
 		forStmt.S.visit(this, o);
 		return null;
 	}
@@ -319,13 +325,15 @@ public final class Checker implements Visitor {
 	}
 
 	// check function return type is compatible with the type of return statement
-	// Object o is the type of function return type
+	// Object o is the declaration of function
 	@Override
 	public Object visitReturnStmt(ReturnStmt retStmt, Object o) {
 		Type funcRetType = (Type)o;
 		Type retExprType = (Type)retStmt.E.visit(this, null);
-		if(retExprType.assignable(funcRetType)) {
-			retStmt.E = i2f(retStmt.E);
+		if(funcRetType.assignable(retExprType)) {
+			if(!funcRetType.equals(retExprType)) {
+				retStmt.E = i2f(retStmt.E);
+			}
 		} else {
 			reporter.reportError(errMesg[8], "", retStmt.position);
 		}
@@ -335,8 +343,14 @@ public final class Checker implements Visitor {
 	@Override
 	public Object visitCompoundStmt(CompoundStmt compoundStmt, Object o) {
 		idTable.openScope();
+		if(o instanceof FuncDecl) {
+			FuncDecl funcDecl = (FuncDecl)o;
+			// visit parameter list here so that variables declared in parameter list will be
+			// in the scope of compound statement
+			funcDecl.PL.visit(this, null);
+		}
 		compoundStmt.DL.visit(this, null);
-		// Object o is function return type
+		// Object o is declaration of  function
 		compoundStmt.SL.visit(this, o);
 		idTable.closeScope();
 		return null;
@@ -353,6 +367,8 @@ public final class Checker implements Visitor {
 		return null;
 	}
 
+	// Object o is the declaration of function to which expression statement belongs
+	@Override
 	public Object visitExprStmt(ExprStmt ast, Object o) {
 		ast.E.visit(this, o);
 		return null;
@@ -447,7 +463,11 @@ public final class Checker implements Visitor {
 		Type e1Type = (Type)binaryExpr.E1.visit(this, null);
 		Type e2Type = (Type)binaryExpr.E2.visit(this, null);
 		if(e1Type.equals(e2Type)) {
-			binaryExpr.type = e2Type;
+			if(e1Type.isErrorType() || e2Type.isErrorType()) {
+				binaryExpr.type = StdEnvironment.errorType;
+			} else {
+				binaryExpr.type = e1Type;
+			}
 		} else if(e1Type.isFloatType() && e2Type.isIntType()) {
 			binaryExpr.E1 = i2f(binaryExpr.E1);
 			binaryExpr.type = StdEnvironment.floatType;
@@ -459,8 +479,8 @@ public final class Checker implements Visitor {
 			binaryExpr.type = StdEnvironment.errorType;
 		}
 
-		boolean convert2Int = false;
-		boolean convert2Float = false;
+		boolean convert2IntOp = false;
+		boolean convert2FloatOp = false;
 		boolean reportError = false;
 
 		// next apply operator overloading
@@ -469,34 +489,34 @@ public final class Checker implements Visitor {
 			if(op.equals("+") || op.equals("-") || op.equals("*") || op.equals("/") ||
 					op.equals(">") || op.equals(">=") || op.equals("<")|| op.equals("<=")) {
 				if(binaryExpr.type.isIntType()) {
-					convert2Int = true;
+					convert2IntOp = true;
 				} else if(binaryExpr.type.isFloatType()) {
-					convert2Float = true;
+					convert2FloatOp = true;
 				} else {
 					reportError = true;
 				}
 			} 
 			if(op.equals("&&") || op.equals("||")) {
 				if(binaryExpr.type.isBooleanType()) {
-					convert2Int = true;
+					convert2IntOp = true;
 				} else {
 					reportError = true;
 				}
 			}
 			if(op.equals("==") || op.equals("!=")) {
 				if(binaryExpr.type.isIntType() || binaryExpr.type.isBooleanType()) {
-					convert2Int = true;
+					convert2IntOp = true;
 				} else if(binaryExpr.type.isFloatType()) {
-					convert2Float = true;
+					convert2FloatOp = true;
 				} else {
 					reportError = true;
 				}
 			}
 		}
-		if(convert2Int) {
+		if(convert2IntOp) {
 			binaryExpr.O.spelling = "i" + binaryExpr.O.spelling;
 		}
-		if(convert2Float) {
+		if(convert2FloatOp) {
 			binaryExpr.O.spelling = "f" + binaryExpr.O.spelling;
 		}
 		if(reportError) {
@@ -530,17 +550,18 @@ public final class Checker implements Visitor {
 	public Object visitExprList(ExprList exprList, Object o) {
 		Type elementTpye = (Type)o;
 		exprList.E.visit(this, null);
-		if(exprList.E.type.assignable(elementTpye)) {
-			if(!exprList.E.type.equals(elementTpye)) {
+		if(elementTpye.assignable(exprList.E.type)) {
+			if(!elementTpye.equals(exprList.E.type)) {
 				exprList.E = i2f(exprList.E);
 			}
 		} else {
 			reporter.reportError(errMesg[13], "", exprList.E.position);
 		}
-		if((exprList.EL instanceof ExprList)) {
-			return new Integer((Integer)exprList.EL.visit(this, o)) + 1;
+		if(exprList.EL.isEmpty()) {
+			return new Integer(0);
+		} else {
+			return (Integer) exprList.EL.visit(this, o) + 1;
 		}
-		return new Integer(1);
 	}
 
 	// check whether the variable is declared as a array
@@ -588,36 +609,43 @@ public final class Checker implements Visitor {
 		return call.type;
 	}
 
-	private boolean isValidLvalue(Expr lvalue) {
-		return false;
-	}
-
-	// here is not finished yet
+	// 
 	@Override
-	public Object visitAssignExpr(AssignExpr assign, Object o) {
-		Expr lvalue = assign.E1;
-		Expr rvalue = assign.E2;
-		if(isValidLvalue(lvalue)) {
-			Type ltype = (Type)lvalue.visit(this, null);
-			Type rtype = (Type)rvalue.visit(this, null);
-			// array cannot be lvalue and rvalue 
-			if(ltype.isArrayType() || rtype.isArrayType()) {
-				// use array as a scalar
-				reporter.reportError(errMesg[11], "", assign.position);
-				assign.type = StdEnvironment.errorType;
-			} 
+	public Object visitAssignExpr(AssignExpr assignExpr, Object o) {
+		assignExpr.E1.visit(this, o);
+		assignExpr.E2.visit(this, o);
+		if(!(assignExpr.E1 instanceof VarExpr || assignExpr.E1 instanceof ArrayExpr)) {
+			reporter.reportError(errMesg[7], "", assignExpr.E1.position);
+			assignExpr.type = StdEnvironment.errorType;
+		} else if(assignExpr.E1 instanceof VarExpr) {
+			Decl decl = (Decl)((SimpleVar)((VarExpr)assignExpr.E1).V).I.decl;
+			if(decl instanceof FuncDecl) {
+				reporter.reportError(errMesg[7], "", assignExpr.E1.position);
+				assignExpr.type = StdEnvironment.errorType;
+			}
 		} else {
-			reporter.reportError(errMesg[7], "", assign.position);
+			if(assignExpr.E1.type.assignable(assignExpr.E2.type)) {
+				if(!assignExpr.E1.type.equals(assignExpr.E2.type)) {
+					assignExpr.E2 = i2f(assignExpr.E2);
+					assignExpr.type = StdEnvironment.floatType;
+				}
+			} else {
+				reporter.reportError(errMesg[7], "", assignExpr.E1.position);
+				assignExpr.type = StdEnvironment.errorType;
+			}		
 		}
-		return null;
+		return assignExpr.type;
 	} 
 
 	@Override
-	public Object visitEmptyExpr(EmptyExpr ast, Object o) {
-		ast.type = StdEnvironment.errorType;
-		return ast.type;
+	public Object visitEmptyExpr(EmptyExpr emptyExpr, Object o) {
+		if(emptyExpr.parent instanceof ReturnStmt) {
+			emptyExpr.type = StdEnvironment.voidType;
+		} else {
+			emptyExpr.type = StdEnvironment.errorType;
+		}
+		return emptyExpr.type;
 	}
-
 
 	// Literals, Identifiers and Operators
 	@Override
@@ -713,7 +741,7 @@ public final class Checker implements Visitor {
 			if(actualType.isArrayType()) {
 				Type formalArrayType = ((ArrayType)formalType).T;
 				Type actualArrayType = ((ArrayType)actualType).T;
-				if(actualArrayType.assignable(formalArrayType)) {
+				if(formalArrayType.assignable(actualArrayType)) {
 					isMatch = true;
 				}
 			}
@@ -725,8 +753,7 @@ public final class Checker implements Visitor {
 		if(!isMatch) {
 			reporter.reportError(errMesg[27], "", arg.E.position);
 		}
-		if(actualType.equals(StdEnvironment.intType) && formalType.equals(StdEnvironment.floatType)) {
-			// type coercion here
+		if(isMatch && !formalType.equals(actualType)) {
 			arg.E = i2f(arg.E);
 		}
 		return null;
@@ -740,6 +767,7 @@ public final class Checker implements Visitor {
 	public Object visitEmptyArgList(EmptyArgList emptyArgList, Object o) {
 		List formalParaList = (List)o;
 		if(formalParaList instanceof EmptyParaList) {
+			// too few actual parameters
 			reporter.reportError(errMesg[26], "", emptyArgList.position);
 		}
 		return null;
