@@ -158,7 +158,7 @@ public class vc {
           }
 
           System.out.println("Pass 2: Semantic Analysis");
-          /*checker  = new Checker(reporter);
+          checker  = new Checker(reporter);
           checker.check(theAST);
 
           if (reporter.numErrors == 0) {
@@ -171,7 +171,7 @@ public class vc {
             if (drawingAST == 4)
               drawer.enableDebugging(); // show SourcePosition
             drawer.draw(theAST); // draw the AST
-          }*/
+          }
        }
        else 
          System.out.println ("Compilation was unsuccessful.");
