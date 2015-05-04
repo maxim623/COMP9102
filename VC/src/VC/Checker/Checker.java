@@ -156,7 +156,7 @@ public final class Checker implements Visitor {
 		 * If not, checker reports error that function has no return statement.
 		 * */
 		if (!funcDecl.T.isVoidType() && !functionHasRet.contains(funcDecl)) {
-			reporter.reportError(errMesg[31] + ": function % need a return statement.", funcDecl.I.spelling, funcDecl.position);
+			reporter.reportError(errMesg[31] + ": function % need a correct return statement.", funcDecl.I.spelling, funcDecl.position);
 		}
 		return null;
 	}
@@ -206,7 +206,7 @@ public final class Checker implements Visitor {
 				}
 			} else if (!globalVarDecl.E.isEmptyExpr()) {
 				// use not a array initializer to initialize array
-				reporter.reportError(errMesg[15] + ": array %", globalVarDecl.I.spelling, globalVarDecl.position);
+				reporter.reportError(errMesg[15] + ": %", globalVarDecl.I.spelling, globalVarDecl.position);
 			}
 		} else {
 			if (globalVarDecl.T.assignable(globalVarDecl.E.type)) {
@@ -258,7 +258,7 @@ public final class Checker implements Visitor {
 				}
 			} else if (!localVarDecl.E.isEmptyExpr()) {
 				// use not a array initializer to initialize array
-				reporter.reportError(errMesg[15] + ": array %", localVarDecl.I.spelling, localVarDecl.position);
+				reporter.reportError(errMesg[15] + ": %", localVarDecl.I.spelling, localVarDecl.position);
 			}
 		} else {
 			if (localVarDecl.T.assignable(localVarDecl.E.type)) {
@@ -277,9 +277,9 @@ public final class Checker implements Visitor {
 	@Override
 	public Object visitIfStmt(IfStmt ifStmt, Object o) {
 		Type exprType = (Type) ifStmt.E.visit(this, null);
-		if (!exprType.isBooleanType()) {
+		if (exprType == null || !exprType.isBooleanType()) {
 			// not a boolean expression
-			reporter.reportError(errMesg[20] + ": % appears here", exprType.toString(), ifStmt.position);
+			reporter.reportError(errMesg[20], "", ifStmt.E.position);
 		}
 		// Object o is the declaration of function that this statement belongs to
 		ifStmt.S1.visit(this, o);
@@ -291,9 +291,9 @@ public final class Checker implements Visitor {
 	public Object visitForStmt(ForStmt forStmt, Object o) {
 		forStmt.E1.visit(this, null);
 		Type exprType = (Type) forStmt.E2.visit(this, null);
-		if (!forStmt.E2.isEmptyExpr() && !exprType.isBooleanType()) {
+		if (exprType == null || !forStmt.E2.isEmptyExpr() && !exprType.isBooleanType()) {
 			// not a boolean expression
-			reporter.reportError(errMesg[21] + ": % appears here", exprType.toString(), forStmt.position);
+			reporter.reportError(errMesg[21], "", forStmt.E2.position);
 		}
 		forStmt.E3.visit(this, null);
 		forStmt.S.visit(this, o);
@@ -303,9 +303,9 @@ public final class Checker implements Visitor {
 	@Override
 	public Object visitWhileStmt(WhileStmt whileStmt, Object o) {
 		Type exprType = (Type) whileStmt.E.visit(this, null);
-		if (!exprType.isBooleanType()) {
+		if (exprType == null || !exprType.isBooleanType()) {
 			// not a boolean expression
-			reporter.reportError(errMesg[22] + ": % appears here", exprType.toString(), whileStmt.position);
+			reporter.reportError(errMesg[22], "", whileStmt.position);
 		}
 		whileStmt.S.visit(this, o);
 		return null;
@@ -407,8 +407,7 @@ public final class Checker implements Visitor {
 		return null;
 	}
 
-	// Object o is the declaration of function to which expression statement
-	// belongs
+	// Object o is the declaration of function to which expression statement belongs
 	@Override
 	public Object visitExprStmt(ExprStmt ast, Object o) {
 		ast.E.visit(this, o);
@@ -477,7 +476,7 @@ public final class Checker implements Visitor {
 				unaryExpr.type = exprType;
 			} else {
 				// apply + and - to wrong type
-				reporter.reportError(errMesg[10] + ": incompatible type %", unaryExpr.O.spelling, unaryExpr.position);
+				reporter.reportError(errMesg[10] + ": incompatible type %", exprType.toString(), unaryExpr.E.position);
 				unaryExpr.type = StdEnvironment.errorType;
 			}
 		}
@@ -487,9 +486,15 @@ public final class Checker implements Visitor {
 				unaryExpr.type = exprType;
 			} else {
 				// apply ! to wrong type
-				reporter.reportError(errMesg[10] + ": incompatible type %", unaryExpr.O.spelling,	unaryExpr.position);
+				reporter.reportError(errMesg[10] + ": incompatible type % here", exprType.toString(), unaryExpr.E.position);
 				unaryExpr.type = StdEnvironment.errorType;
 			}
+		}
+		// apply operator overloading
+		if(unaryExpr.type.isFloatType()) {
+			unaryExpr.O.spelling = "f" + unaryExpr.O.spelling;
+		} else {
+			unaryExpr.O.spelling = "i" + unaryExpr.O.spelling;
 		}
 		return unaryExpr.type;
 	}
@@ -609,6 +614,7 @@ public final class Checker implements Visitor {
 		} else {
 			reporter.reportError(errMesg[13], "", exprList.E.position);
 		}
+		// calculate the lenght of expression list
 		if (exprList.EL.isEmpty()) {
 			return new Integer(1);
 		} else {
@@ -689,7 +695,7 @@ public final class Checker implements Visitor {
 			}
 		} else {
 			// type is incompatible
-			reporter.reportError(errMesg[7], "", assignExpr.E1.position);
+			reporter.reportError(errMesg[6], "", assignExpr.E1.position);
 			assignExpr.type = StdEnvironment.errorType;
 		}
 		return assignExpr.type;
@@ -813,7 +819,7 @@ public final class Checker implements Visitor {
 			}
 		}
 		if (!isMatch) {
-			reporter.reportError(errMesg[27], "", arg.E.position);
+			reporter.reportError(errMesg[27] + ": % expect here", formalParam.T.toString(), arg.E.position);
 		}
 		if (isMatch && !formalType.equals(actualType)) {
 			arg.E = i2f(arg.E);
@@ -830,7 +836,7 @@ public final class Checker implements Visitor {
 		List formalParaList = (List) o;
 		if (!formalParaList.isEmptyParaList()) {
 			// too few actual parameters
-			reporter.reportError(errMesg[26], "", emptyArgList.position);
+			reporter.reportError(errMesg[26], "", emptyArgList.parent.position);
 		}
 		return null;
 	}
