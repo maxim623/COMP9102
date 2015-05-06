@@ -135,9 +135,10 @@ public final class Checker implements Visitor {
 		if (func != null) {
 			// duplicate function name
 			reporter.reportError(errMesg[2] + ": %", func.id, funcDecl.position);
-		} else {
-			idTable.insert(funcDecl.I.spelling, funcDecl);
 		}
+		// although this symbol has been declared, it still need to be push into symbol table to avoid 
+		// incorrect information
+		idTable.insert(funcDecl.I.spelling, funcDecl);
 		/*
 		 * Currently parameter list cannot be visited because if parameter list
 		 * is visited here, the scope of parameters will be in the same scope as
@@ -156,7 +157,7 @@ public final class Checker implements Visitor {
 		 * If not, checker reports error that function has no return statement.
 		 * */
 		if (!funcDecl.T.isVoidType() && !functionHasRet.contains(funcDecl)) {
-			reporter.reportError(errMesg[31] + ": function % need a correct return statement.", funcDecl.I.spelling, funcDecl.position);
+			reporter.reportError(errMesg[31] + ": function % need a return statement.", funcDecl.I.spelling, funcDecl.position);
 		}
 		return null;
 	}
@@ -594,6 +595,7 @@ public final class Checker implements Visitor {
 			// array initializer for scalar
 			reporter.reportError(errMesg[14], "", initExpr.position);
 			initExpr.type = StdEnvironment.errorType;
+			return initExpr.type;
 		}
 		return initExpr.IL.visit(this, ((ArrayType) declType).T);
 	}
@@ -904,8 +906,7 @@ public final class Checker implements Visitor {
 	// function, and enters it in the symbol table.
 	private FuncDecl declareStdFunc(Type resultType, String id, List pl) {
 		FuncDecl binding;
-		binding = new FuncDecl(resultType, new Ident(id, dummyPos), pl,
-				new EmptyStmt(dummyPos), dummyPos);
+		binding = new FuncDecl(resultType, new Ident(id, dummyPos), pl,	new EmptyStmt(dummyPos), dummyPos);
 		idTable.insert(id, binding);
 		return binding;
 	}
