@@ -157,7 +157,7 @@ public final class Checker implements Visitor {
 		 * If not, checker reports error that function has no return statement.
 		 * */
 		if (!funcDecl.T.isVoidType() && !functionHasRet.contains(funcDecl)) {
-			reporter.reportError(errMesg[31] + ": function % need a return statement.", funcDecl.I.spelling, funcDecl.position);
+			reporter.reportError(errMesg[31] + ": function % need a correct return statement.", funcDecl.I.spelling, funcDecl.position);
 		}
 		return null;
 	}
@@ -618,9 +618,10 @@ public final class Checker implements Visitor {
 		}
 		// calculate the lenght of expression list
 		if (exprList.EL.isEmpty()) {
-			return new Integer(1);
+			return new Integer(exprList.index + 1);
 		} else {
-			return (Integer) exprList.EL.visit(this, o) + 1;
+			((ExprList)exprList.EL).index = exprList.index + 1;
+			return (Integer) exprList.EL.visit(this, o);
 		}
 	}
 
