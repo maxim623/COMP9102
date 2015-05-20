@@ -695,9 +695,8 @@ public final class Checker implements Visitor {
 			if (!assignExpr.E1.type.equals(assignExpr.E2.type)) {
 				assignExpr.E2 = i2f(assignExpr.E2);
 				assignExpr.type = StdEnvironment.floatType;
-			} else {
-				assignExpr.type = assignExpr.E1.type;
 			}
+			assignExpr.type = assignExpr.E1.type;
 		} else {
 			// type is incompatible
 			reporter.reportError(errMesg[6], "", assignExpr.E1.position);
