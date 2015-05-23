@@ -597,6 +597,7 @@ public final class Checker implements Visitor {
 			initExpr.type = StdEnvironment.errorType;
 			return initExpr.type;
 		}
+		initExpr.type = declType;
 		return initExpr.IL.visit(this, ((ArrayType) declType).T);
 	}
 

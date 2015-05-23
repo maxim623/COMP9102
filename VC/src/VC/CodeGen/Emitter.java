@@ -12,9 +12,10 @@
 
 package VC.CodeGen;
 
-import java.util.LinkedList;
-import java.util.Enumeration;
-import java.util.ListIterator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 import VC.ASTs.*;
 import VC.ErrorReporter;
@@ -26,6 +27,8 @@ public final class Emitter implements Visitor {
 	private String inputFilename;
 	private String classname;
 	private String outputFilename;
+	private Map<String, String> binaryOp2Instruct;
+	private Set<String> compOp;
 
 	public Emitter(String inputFilename, ErrorReporter reporter) {
 		this.inputFilename = inputFilename;
@@ -36,7 +39,36 @@ public final class Emitter implements Visitor {
 			classname = inputFilename.substring(0, i);
 		else
 			classname = inputFilename;
+		binaryOp2Instruct = new HashMap<String, String>();
+		compOp = new HashSet<String>();
+		initOpContainers();
 
+	}
+
+	private void initOpContainers() {
+		binaryOp2Instruct.put("i+", JVM.IADD);
+		binaryOp2Instruct.put("i-", JVM.ISUB);
+		binaryOp2Instruct.put("i*", JVM.IMUL);
+		binaryOp2Instruct.put("i/", JVM.IDIV);
+
+		binaryOp2Instruct.put("f+", JVM.FADD);
+		binaryOp2Instruct.put("f-", JVM.FSUB);
+		binaryOp2Instruct.put("f*", JVM.FMUL);
+		binaryOp2Instruct.put("f/", JVM.FDIV);
+
+		compOp.add("i>");
+		compOp.add("i>=");
+		compOp.add("i<");
+		compOp.add("i<=");
+		compOp.add("i!=");
+		compOp.add("i==");
+
+		compOp.add("f>");
+		compOp.add("f>=");
+		compOp.add("f<");
+		compOp.add("f<=");
+		compOp.add("f!=");
+		compOp.add("f==");
 	}
 
 	// PRE: ast must be a Program node
@@ -89,6 +121,17 @@ public final class Emitter implements Visitor {
 			DeclList dlAST = (DeclList) list;
 			if (dlAST.D instanceof GlobalVarDecl) {
 				GlobalVarDecl vAST = (GlobalVarDecl) dlAST.D;
+				// create array here, not in visitArrayType
+				if(vAST.T.isArrayType()) {
+					ArrayType array = (ArrayType) vAST.T;
+					int length = Integer.parseInt(((IntExpr)array.E).IL.spelling.toString());
+					emitICONST(length);
+					emit(JVM.NEWARRAY, array.T.toString());
+					frame.push(2);
+					if(!vAST.E.isEmptyExpr()) {
+						vAST.E.visit(this, frame);
+					}
+				}
 				if (!vAST.E.isEmptyExpr()) {
 					vAST.E.visit(this, frame);
 				} else {
@@ -98,7 +141,7 @@ public final class Emitter implements Visitor {
 						emit(JVM.ICONST_0);
 					frame.push();
 				}
-				emitPUTSTATIC(VCtoJavaType(vAST.T), vAST.I.spelling); 
+				emitPUTSTATIC(VCtoJavaType(vAST.T), vAST.I.spelling);
 				frame.pop();
 			}
 			list = dlAST.DL;
@@ -618,92 +661,233 @@ public final class Emitter implements Visitor {
 	@Override
 	public Object visitForStmt(ForStmt ast, Object o) {
 		Frame frame = (Frame)o;
+		// L1 marks beginning of loop, L2 marks end of loop, L3 marks where continue statement should go 
 		String L1 = frame.getNewLabel();
 		String L2 = frame.getNewLabel();
-		frame.conStack.push(L1);
-		frame.conStack.push(L2);
+		String L3 = frame.getNewLabel();
+		frame.conStack.push(L3);
+		frame.brkStack.push(L2);
 		ast.E1.visit(this, o);
+		// if E1 and E2 is function invocation, and the return type of function is not void, the return value should be popped.
+		// checker have placed the return type of function in the type field
+		if(!ast.E1.isEmptyExpr() && ast.E1 instanceof CallExpr && !ast.E1.type.isVoidType()) {
+			emit(JVM.POP);
+			frame.pop();
+		}
 		emit(L1 + ":");
 		ast.E2.visit(this, o);
 		if(!ast.E2.isEmptyExpr()) {
 			emit(JVM.IFEQ, L2);
 		}
 		ast.S.visit(this, o);
+		emit(L3 + ":");
 		ast.E3.visit(this, o);
+		if(!ast.E1.isEmptyExpr() && ast.E1 instanceof CallExpr && !ast.E1.type.isVoidType()) {
+			emit(JVM.POP);
+			frame.pop();
+		}
 		emit(JVM.GOTO, L1);
 		emit(L2 + ":");
+		frame.conStack.pop();
+		frame.brkStack.pop();
 		return null;
 	}
 
 	@Override
 	public Object visitBreakStmt(BreakStmt ast, Object o) {
-		// TODO Auto-generated method stub
+		Frame frame = (Frame)o;
+		emit(JVM.GOTO, frame.brkStack.peek());
 		return null;
 	}
 
 	@Override
 	public Object visitContinueStmt(ContinueStmt ast, Object o) {
-		// TODO Auto-generated method stub
+		Frame frame = (Frame) o;
+		emit(JVM.GOTO, frame.conStack.peek());
 		return null;
 	}
 
 	@Override
 	public Object visitExprStmt(ExprStmt ast, Object o) {
-		// TODO Auto-generated method stub
+		Frame frame = (Frame) o;
+		ast.E.visit(this, o);
+		if(ast.E instanceof CallExpr) {
+			CallExpr call = (CallExpr) ast.E;
+			if(!call.type.isVoidType()) {
+				emit(JVM.POP);
+				frame.pop();
+			}
+		}
 		return null;
 	}
 
 	@Override
 	public Object visitUnaryExpr(UnaryExpr ast, Object o) {
 		// TODO Auto-generated method stub
+		Frame frame = (Frame) o;
+		String L1 = frame.getNewLabel();
+		String L2 = frame.getNewLabel();
+		ast.E.visit(this, o);
+		String op = ast.O.spelling;
+		// the size of stack does not change
+		if(op.equals("i!")) {
+			emit(JVM.IFNE, L1);
+			emitBCONST(true);
+			emit(JVM.GOTO, L2);
+			emit(L1);
+			emitBCONST(false);
+			emit(L2);
+		} else if (op.equals("i-")){
+			emit(JVM.INEG);
+		} else if(op.equals("f-")) {
+			emit(JVM.FNEG);
+		} else if(op.equals("i2f")) {
+			emit(JVM.I2F);
+		}
 		return null;
 	}
 
 	@Override
 	public Object visitBinaryExpr(BinaryExpr ast, Object o) {
-		// TODO Auto-generated method stub
+		Frame frame = (Frame) o;
+		String op = ast.O.spelling;
+		if(binaryOp2Instruct.containsKey(op)) {
+			ast.E1.visit(this, o);
+			ast.E2.visit(this, o);
+			emit(binaryOp2Instruct.get(op));
+			// two operands are popped and result is pushed into operand stack, shrink the stack
+			frame.pop();
+		} else if(compOp.contains(op)) {
+			ast.E1.visit(this, o);
+			ast.E2.visit(this, o);
+			if(op.contains("f")) {
+				emitFCMP(op, frame);
+			} else if(op.contains("i")) {
+				emitIF_ICMPCOND(op, frame);
+			}
+			frame.pop();
+		} else if(op.equals("i&&")) {
+			String L1 = frame.getNewLabel();
+			String L2 = frame.getNewLabel();
+			ast.E1.visit(this, o);
+			emit(JVM.IFEQ, L1);
+			ast.E2.visit(this, o);
+			emit(JVM.IFEQ, L1);
+			emitICONST(1);
+			emit(JVM.GOTO, L2);
+			emit(L1 + ":");
+			emitICONST(0);
+			emit(L2 + ":");
+			// the size of stack does not change
+		} else if(op.equals("i||")) {
+			String L1 = frame.getNewLabel();
+			String L2 = frame.getNewLabel();
+			ast.E1.visit(this, o);
+			emit(JVM.IFNE, L1);
+			ast.E2.visit(this, o);
+			emit(JVM.IFNE, L1);
+			emitICONST(0);
+			emit(JVM.GOTO, "L2");
+			emit(L1 + ":");
+			emitICONST(1);
+			emit(L2 + ":");
+		}
 		return null;
 	}
 
 	@Override
 	public Object visitInitExpr(InitExpr ast, Object o) {
-		// TODO Auto-generated method stub
+		Frame frame = (Frame) o;
+		List list = ast.IL;
+		int index = 0;
+		while(!list.isEmpty()) {
+			ExprList exprList = (ExprList)list;
+			//+---------------------
+			//|arrayref index value
+			//+---------------------
+			emit(JVM.DUP);
+			frame.push();
+			emitICONST(index);
+			frame.push();
+			exprList.E.visit(this, o);
+			if(exprList.E.type.isFloatType()) {
+				emit(JVM.FASTORE);
+			} else {
+				emit(JVM.IASTORE);
+			}
+			frame.pop(3);
+			index++;
+			list = exprList.EL;
+		}
 		return null;
 	}
 
 	@Override
 	public Object visitExprList(ExprList ast, Object o) {
-		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
 	public Object visitArrayExpr(ArrayExpr ast, Object o) {
-		// TODO Auto-generated method stub
+		Frame frame = (Frame) o;
+		//+--------------
+		//|arrayref index
+		//+--------------
+		ast.V.visit(this, o);
+		ast.E.visit(this, o);
+		if(ast.type.isFloatType()) {
+			emit(JVM.FALOAD);
+		} else {
+			emit(JVM.IALOAD);
+		}
+		frame.pop();
 		return null;
 	}
 
 	@Override
 	public Object visitVarExpr(VarExpr ast, Object o) {
-		// TODO Auto-generated method stub
+		ast.V.visit(this, o);
 		return null;
 	}
 
 	@Override
 	public Object visitAssignExpr(AssignExpr ast, Object o) {
-		// TODO Auto-generated method stub
+		Frame frame = (Frame) o;
+		if(ast.E1 instanceof ArrayExpr) {
+			ArrayExpr arrayExpr = (ArrayExpr) ast.E1;
+			arrayExpr.E.visit(this, o);
+			arrayExpr.V.visit(this, o);
+			ast.E2.visit(this, o);
+			if(ast.E2.type.isFloatType()) {
+				emit(JVM.FASTORE);
+			} else {
+				emit(JVM.IASTORE);
+			}
+			frame.pop(3);
+		} else if(ast.E1 instanceof VarExpr) {
+			SimpleVar var = (SimpleVar)((VarExpr)ast.E1).V;
+			ast.E2.visit(this, o);
+			if(var.I.decl instanceof GlobalVarDecl) {
+				emitPUTSTATIC(VCtoJavaType(var.type), var.I.spelling);
+			} else {
+				if(ast.type.isFloatType()) {
+					emitFSTORE(var.I);
+				} else {
+					emitISTORE(var.I);
+				}
+			}
+		}
 		return null;
 	}
 
 	@Override
 	public Object visitStringType(StringType ast, Object o) {
-		// TODO Auto-generated method stub
 		return null;
 	}
 
 	@Override
 	public Object visitArrayType(ArrayType ast, Object o) {
-		// TODO Auto-generated method stub
+		// array is created here, which is handled in visitProgram
 		return null;
 	}
 
