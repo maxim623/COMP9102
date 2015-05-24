@@ -121,15 +121,15 @@ public final class Emitter implements Visitor {
 			DeclList dlAST = (DeclList) list;
 			if (dlAST.D instanceof GlobalVarDecl) {
 				GlobalVarDecl vAST = (GlobalVarDecl) dlAST.D;
+				// modified
 				if(vAST.T.isArrayType()) {
 					ArrayType arrayType = (ArrayType)vAST.T;
 					arrayType.visit(this, frame);
 					if(!vAST.E.isEmptyExpr()) {
 						vAST.E.visit(this, frame);
-					} 
+					}
 					emitPUTSTATIC(VCtoJavaType(arrayType), vAST.I.spelling);
 					frame.pop();
-
 					list = dlAST.DL;
 					continue;
 				}
@@ -233,10 +233,10 @@ public final class Emitter implements Visitor {
 			emit(JVM.RETURN);
 		} else {
 			ast.E.visit(this, o);
-			if(ast.E.type.isIntType()) {
-				emit(JVM.IRETURN);
-			} else {
+			if(ast.E.type.isFloatType()) {
 				emit(JVM.FRETURN);
+			} else {
+				emit(JVM.IRETURN);
 			}
 		}
 		return null;
@@ -428,7 +428,7 @@ public final class Emitter implements Visitor {
 		}
 
 		ast.S.visit(this, frame);
-
+		
 		// JVM requires an explicit return in every method. 
 		// In VC, a function returning void may not contain a return, and
 		// a function returning int or float is not guaranteed to contain
@@ -467,6 +467,7 @@ public final class Emitter implements Visitor {
 
 		emit(JVM.VAR + " " + ast.index + " is " + ast.I.spelling + " " + T + " from " + (String) frame.scopeStart.peek() + " to " +  (String) frame.scopeEnd.peek());
 
+		// modified
 		if(ast.T.isArrayType()) {
 			ArrayType arrayType = (ArrayType) ast.T;
 			arrayType.visit(this, o);
@@ -601,7 +602,7 @@ public final class Emitter implements Visitor {
 	}
 
 	// Variables 
-
+	//modified
 	public Object visitSimpleVar(SimpleVar ast, Object o) {
 		Frame frame = (Frame) o;
 		if(ast.I.decl instanceof GlobalVarDecl) {
@@ -658,6 +659,7 @@ public final class Emitter implements Visitor {
 		return null;
 	}
 
+	//modified
 	@Override
 	public Object visitIfStmt(IfStmt ast, Object o) {
 		Frame frame = (Frame)o;
@@ -687,6 +689,13 @@ public final class Emitter implements Visitor {
 		return null;
 	}
 
+	private void generatePOPInst(Expr expr, Frame frame) {
+		if(!(expr instanceof CallExpr && expr.type.isVoidType() || expr instanceof EmptyExpr || expr instanceof AssignExpr)) {
+			emit(JVM.POP);
+			frame.pop();
+		}
+	}
+	
 	@Override
 	public Object visitForStmt(ForStmt ast, Object o) {
 		Frame frame = (Frame)o;
@@ -697,12 +706,7 @@ public final class Emitter implements Visitor {
 		frame.conStack.push(L3);
 		frame.brkStack.push(L2);
 		ast.E1.visit(this, o);
-		// if E1 and E2 is function invocation, and the return type of function is not void, the return value should be popped.
-		// checker have placed the return type of function in the type field
-		if(!ast.E1.isEmptyExpr() && ast.E1 instanceof CallExpr && !ast.E1.type.isVoidType()) {
-			emit(JVM.POP);
-			frame.pop();
-		}
+		generatePOPInst(ast.E1, frame);
 		emit(L1 + ":");
 		ast.E2.visit(this, o);
 		if(!ast.E2.isEmptyExpr()) {
@@ -711,10 +715,7 @@ public final class Emitter implements Visitor {
 		ast.S.visit(this, o);
 		emit(L3 + ":");
 		ast.E3.visit(this, o);
-		if(!ast.E1.isEmptyExpr() && ast.E1 instanceof CallExpr && !ast.E1.type.isVoidType()) {
-			emit(JVM.POP);
-			frame.pop();
-		}
+		generatePOPInst(ast.E3, frame);
 		emit(JVM.GOTO, L1);
 		emit(L2 + ":");
 		frame.conStack.pop();
@@ -740,13 +741,7 @@ public final class Emitter implements Visitor {
 	public Object visitExprStmt(ExprStmt ast, Object o) {
 		Frame frame = (Frame) o;
 		ast.E.visit(this, o);
-		if(ast.E instanceof CallExpr) {
-			CallExpr call = (CallExpr) ast.E;
-			if(!call.type.isVoidType()) {
-				emit(JVM.POP);
-				frame.pop();
-			}
-		}
+		generatePOPInst(ast.E, frame);
 		return null;
 	}
 
@@ -906,6 +901,9 @@ public final class Emitter implements Visitor {
 		} else if(ast.E1 instanceof VarExpr) {
 			SimpleVar var = (SimpleVar)((VarExpr)ast.E1).V;
 			ast.E2.visit(this, o);
+			if(ast.parent instanceof AssignExpr) {
+				emit(JVM.DUP);
+			}
 			if(var.I.decl instanceof GlobalVarDecl) {
 				emitPUTSTATIC(VCtoJavaType(var.type), var.I.spelling);
 			} else {
@@ -924,6 +922,7 @@ public final class Emitter implements Visitor {
 		return null;
 	}
 
+	//modified
 	@Override
 	public Object visitArrayType(ArrayType ast, Object o) {
 		Frame frame = (Frame) o;
