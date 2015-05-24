@@ -175,9 +175,11 @@ public final class JVM {
 	// array instruction
 	NEWARRAY = "newarray",
 	IASTORE = "iastore",
+	BASTORE = "bastore",
 	FASTORE = "fastore",
-	IALOAD = "IALOAD",
-	FALOAD = "FALOAD";
+	IALOAD = "iaload",
+	BALOAD = "baload",
+	FALOAD = "faload";
 	
 	// Limitations of the JVM 
 

@@ -121,16 +121,17 @@ public final class Emitter implements Visitor {
 			DeclList dlAST = (DeclList) list;
 			if (dlAST.D instanceof GlobalVarDecl) {
 				GlobalVarDecl vAST = (GlobalVarDecl) dlAST.D;
-				// create array here, not in visitArrayType
 				if(vAST.T.isArrayType()) {
-					ArrayType array = (ArrayType) vAST.T;
-					int length = Integer.parseInt(((IntExpr)array.E).IL.spelling.toString());
-					emitICONST(length);
-					emit(JVM.NEWARRAY, array.T.toString());
-					frame.push(2);
+					ArrayType arrayType = (ArrayType)vAST.T;
+					arrayType.visit(this, frame);
 					if(!vAST.E.isEmptyExpr()) {
 						vAST.E.visit(this, frame);
-					}
+					} 
+					emitPUTSTATIC(VCtoJavaType(arrayType), vAST.I.spelling);
+					frame.pop();
+
+					list = dlAST.DL;
+					continue;
 				}
 				if (!vAST.E.isEmptyExpr()) {
 					vAST.E.visit(this, frame);
@@ -466,6 +467,17 @@ public final class Emitter implements Visitor {
 
 		emit(JVM.VAR + " " + ast.index + " is " + ast.I.spelling + " " + T + " from " + (String) frame.scopeStart.peek() + " to " +  (String) frame.scopeEnd.peek());
 
+		if(ast.T.isArrayType()) {
+			ArrayType arrayType = (ArrayType) ast.T;
+			arrayType.visit(this, o);
+			if(!ast.E.isEmptyExpr()) {
+				ast.E.visit(this, o);
+			}
+			emit(JVM.ASTORE + "_" + ast.index);
+			frame.pop();
+			return null;
+		}
+
 		if (!ast.E.isEmptyExpr()) {
 			ast.E.visit(this, o);
 
@@ -487,7 +499,6 @@ public final class Emitter implements Visitor {
 				frame.pop();
 			}
 		}
-
 		return null;
 	}
 
@@ -592,6 +603,24 @@ public final class Emitter implements Visitor {
 	// Variables 
 
 	public Object visitSimpleVar(SimpleVar ast, Object o) {
+		Frame frame = (Frame) o;
+		if(ast.I.decl instanceof GlobalVarDecl) {
+			emitGETSTATIC(VCtoJavaType(ast.type), ast.I.spelling);
+		} else {
+			int index = ((Decl)ast.I.decl).index;
+			if(ast.I.decl instanceof GlobalVarDecl) {
+				emitGETSTATIC(VCtoJavaType(ast.type), ast.I.spelling);
+			} else {
+				if(ast.type.isArrayType()) {
+					emitALOAD(index);
+				} else if(ast.type.isFloatType()) {
+					emitFLOAD(index);
+				} else {
+					emitILOAD(index);
+				}
+			}
+		}
+		frame.push();
 		return null;
 	}
 
@@ -812,6 +841,8 @@ public final class Emitter implements Visitor {
 			exprList.E.visit(this, o);
 			if(exprList.E.type.isFloatType()) {
 				emit(JVM.FASTORE);
+			} else if (exprList.E.type.isBooleanType()){
+				emit(JVM.BASTORE);
 			} else {
 				emit(JVM.IASTORE);
 			}
@@ -837,6 +868,8 @@ public final class Emitter implements Visitor {
 		ast.E.visit(this, o);
 		if(ast.type.isFloatType()) {
 			emit(JVM.FALOAD);
+		} else if (ast.type.isBooleanType()){
+			emit(JVM.BALOAD);
 		} else {
 			emit(JVM.IALOAD);
 		}
@@ -854,12 +887,18 @@ public final class Emitter implements Visitor {
 	public Object visitAssignExpr(AssignExpr ast, Object o) {
 		Frame frame = (Frame) o;
 		if(ast.E1 instanceof ArrayExpr) {
+			//+--------------------
+			//|arrayref index value
+			//+--------------------
 			ArrayExpr arrayExpr = (ArrayExpr) ast.E1;
-			arrayExpr.E.visit(this, o);
 			arrayExpr.V.visit(this, o);
+			arrayExpr.E.visit(this, o);
 			ast.E2.visit(this, o);
+			// Java has different array store instruction for integer, boolean and float
 			if(ast.E2.type.isFloatType()) {
 				emit(JVM.FASTORE);
+			} else if (ast.E2.type.isBooleanType()){
+				emit(JVM.BASTORE);
 			} else {
 				emit(JVM.IASTORE);
 			}
@@ -887,7 +926,11 @@ public final class Emitter implements Visitor {
 
 	@Override
 	public Object visitArrayType(ArrayType ast, Object o) {
-		// array is created here, which is handled in visitProgram
+		Frame frame = (Frame) o;
+		int length = Integer.parseInt(((IntExpr)ast.E).IL.spelling);
+		emitICONST(length);
+		frame.push();
+		emit(JVM.NEWARRAY, ast.T.toString());
 		return null;
 	}
 
@@ -964,7 +1007,14 @@ public final class Emitter implements Visitor {
 		else
 			emit(JVM.FLOAD, index); 
 	}
-
+	
+	private void emitALOAD(int index) {
+		if (index >= 0 && index <= 3) 
+			emit(JVM.ALOAD + "_"  + index); 
+		else
+			emit(JVM.ALOAD, index); 
+	}
+	
 	private void emitGETSTATIC(String T, String I) {
 		emit(JVM.GETSTATIC, classname + "/" + I, T); 
 	}
@@ -1036,7 +1086,20 @@ public final class Emitter implements Visitor {
 			return "I";
 		else if (t.equals(StdEnvironment.floatType))
 			return "F";
+		else if(t.isArrayType()) {
+			ArrayType arrayType = (ArrayType) t;
+			if(arrayType.T.isFloatType()) {
+				return "[F";
+			} else if(arrayType.T.isIntType()) {
+				return "[I";
+			} else if(arrayType.T.isBooleanType()) {
+				return "[Z";
+			} else {
+				return null;
+			}
+		}
 		else // if (t.equals(StdEnvironment.voidType))
-			return "V";
+			//return "V";
+			return t.toString();
 	}
 }
