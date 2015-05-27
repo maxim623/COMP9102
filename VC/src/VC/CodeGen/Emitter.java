@@ -27,7 +27,7 @@ public final class Emitter implements Visitor {
 	private String inputFilename;
 	private String classname;
 	private String outputFilename;
-	private Map<String, String> binaryOp2Instruct;
+	private Map<String, String> arithmeticOp;
 	private Set<String> compOp;
 
 	public Emitter(String inputFilename, ErrorReporter reporter) {
@@ -39,22 +39,22 @@ public final class Emitter implements Visitor {
 			classname = inputFilename.substring(0, i);
 		else
 			classname = inputFilename;
-		binaryOp2Instruct = new HashMap<String, String>();
+		arithmeticOp = new HashMap<String, String>();
 		compOp = new HashSet<String>();
 		initOpContainers();
 
 	}
 
 	private void initOpContainers() {
-		binaryOp2Instruct.put("i+", JVM.IADD);
-		binaryOp2Instruct.put("i-", JVM.ISUB);
-		binaryOp2Instruct.put("i*", JVM.IMUL);
-		binaryOp2Instruct.put("i/", JVM.IDIV);
+		arithmeticOp.put("i+", JVM.IADD);
+		arithmeticOp.put("i-", JVM.ISUB);
+		arithmeticOp.put("i*", JVM.IMUL);
+		arithmeticOp.put("i/", JVM.IDIV);
 
-		binaryOp2Instruct.put("f+", JVM.FADD);
-		binaryOp2Instruct.put("f-", JVM.FSUB);
-		binaryOp2Instruct.put("f*", JVM.FMUL);
-		binaryOp2Instruct.put("f/", JVM.FDIV);
+		arithmeticOp.put("f+", JVM.FADD);
+		arithmeticOp.put("f-", JVM.FSUB);
+		arithmeticOp.put("f*", JVM.FMUL);
+		arithmeticOp.put("f/", JVM.FDIV);
 
 		compOp.add("i>");
 		compOp.add("i>=");
@@ -680,6 +680,8 @@ public final class Emitter implements Visitor {
 		Frame frame = (Frame)o;
 		String L1 = frame.getNewLabel();
 		String L2 = frame.getNewLabel();
+		frame.conStack.push(L1);
+		frame.brkStack.push(L2);
 		emit(L1 + ":");
 		ast.E.visit(this, o);
 		emit(JVM.IFEQ, L2);
@@ -775,10 +777,10 @@ public final class Emitter implements Visitor {
 	public Object visitBinaryExpr(BinaryExpr ast, Object o) {
 		Frame frame = (Frame) o;
 		String op = ast.O.spelling;
-		if(binaryOp2Instruct.containsKey(op)) {
+		if(arithmeticOp.containsKey(op)) {
 			ast.E1.visit(this, o);
 			ast.E2.visit(this, o);
-			emit(binaryOp2Instruct.get(op));
+			emit(arithmeticOp.get(op));
 			// two operands are popped and result is pushed into operand stack, shrink the stack
 			frame.pop();
 		} else if(compOp.contains(op)) {
@@ -802,7 +804,7 @@ public final class Emitter implements Visitor {
 			emit(L1 + ":");
 			emitICONST(0);
 			emit(L2 + ":");
-			// the size of stack does not change
+			frame.push();
 		} else if(op.equals("i||")) {
 			String L1 = frame.getNewLabel();
 			String L2 = frame.getNewLabel();
@@ -811,10 +813,11 @@ public final class Emitter implements Visitor {
 			ast.E2.visit(this, o);
 			emit(JVM.IFNE, L1);
 			emitICONST(0);
-			emit(JVM.GOTO, "L2");
+			emit(JVM.GOTO, L2);
 			emit(L1 + ":");
 			emitICONST(1);
 			emit(L2 + ":");
+			frame.push();
 		}
 		return null;
 	}
@@ -1098,7 +1101,6 @@ public final class Emitter implements Visitor {
 			}
 		}
 		else // if (t.equals(StdEnvironment.voidType))
-			//return "V";
-			return t.toString();
+			return "V";
 	}
 }
