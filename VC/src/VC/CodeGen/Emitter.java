@@ -474,7 +474,11 @@ public final class Emitter implements Visitor {
 			if(!ast.E.isEmptyExpr()) {
 				ast.E.visit(this, o);
 			}
-			emit(JVM.ASTORE + "_" + ast.index);
+			if(ast.index >= 0 && ast.index <= 3) {
+				emit(JVM.ASTORE + "_" + ast.index);
+			} else {
+				emit(JVM.ASTORE, ast.index);
+			}
 			frame.pop();
 			return null;
 		}
