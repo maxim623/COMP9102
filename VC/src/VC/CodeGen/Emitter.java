@@ -29,6 +29,7 @@ public final class Emitter implements Visitor {
 	private String outputFilename;
 	private Map<String, String> arithmeticOp;
 	private Set<String> compOp;
+	private boolean isEmitRetForMain;
 
 	public Emitter(String inputFilename, ErrorReporter reporter) {
 		this.inputFilename = inputFilename;
@@ -42,7 +43,7 @@ public final class Emitter implements Visitor {
 		arithmeticOp = new HashMap<String, String>();
 		compOp = new HashSet<String>();
 		initOpContainers();
-
+		isEmitRetForMain = false;
 	}
 
 	private void initOpContainers() {
@@ -226,7 +227,8 @@ public final class Emitter implements Visitor {
 		 */
 
 		if (frame.isMain())  {
-			emit(JVM.RETURN);
+			emit(JVM.RETURN + "blah");
+			isEmitRetForMain = true;
 			return null;
 		}
 		if(ast.E.isEmptyExpr()) {
@@ -439,9 +441,10 @@ public final class Emitter implements Visitor {
 			emit("; return may not be present in a VC function returning void"); 
 			emit("; The following return inserted by the VC compiler");
 			emit(JVM.RETURN); 
-		} else if (ast.I.spelling.equals("main")) {
+		} else if (ast.I.spelling.equals("main") && !isEmitRetForMain) {
 			// In case VC's main does not have a return itself
 			emit(JVM.RETURN);
+			isEmitRetForMain = true;
 		} else
 			emit(JVM.NOP); 
 
