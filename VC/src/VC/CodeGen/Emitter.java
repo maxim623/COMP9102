@@ -474,11 +474,7 @@ public final class Emitter implements Visitor {
 			if(!ast.E.isEmptyExpr()) {
 				ast.E.visit(this, o);
 			}
-			if(ast.index >= 0 && ast.index <= 3) {
-				emit(JVM.ASTORE + "_" + ast.index);
-			} else {
-				emit(JVM.ASTORE, ast.index);
-			}
+			emitASTORE(ast.index);
 			frame.pop();
 			return null;
 		}
@@ -1020,6 +1016,15 @@ public final class Emitter implements Visitor {
 		else
 			emit(JVM.ALOAD, index); 
 	}
+	
+	private void emitASTORE(int index) {
+		if(index >= 0 && index <= 3) {
+			emit(JVM.ASTORE + "_" + index);
+		} else {
+			emit(JVM.ASTORE, index);
+		}
+	}
+	
 	
 	private void emitGETSTATIC(String T, String I) {
 		emit(JVM.GETSTATIC, classname + "/" + I, T); 
