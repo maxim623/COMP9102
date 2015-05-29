@@ -227,7 +227,7 @@ public final class Emitter implements Visitor {
 		 */
 
 		if (frame.isMain())  {
-			emit(JVM.RETURN + "blah");
+			emit(JVM.RETURN);
 			isEmitRetForMain = true;
 			return null;
 		}
@@ -443,6 +443,10 @@ public final class Emitter implements Visitor {
 			emit(JVM.RETURN); 
 		} else if (ast.I.spelling.equals("main") && !isEmitRetForMain) {
 			// In case VC's main does not have a return itself
+			// if main function has a return statement, the return instruction has been generated
+			// in visitReturnStatement(). Therefore, in visitReturnStatement(), if the return instruction
+			// for main function has been generated, then do not generated return instruction here.
+			// This is trivial but important.
 			emit(JVM.RETURN);
 			isEmitRetForMain = true;
 		} else
