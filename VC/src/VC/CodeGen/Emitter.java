@@ -325,20 +325,34 @@ public final class Emitter implements Visitor {
 			// by traversing its field PL.
 
 			StringBuffer argsTypes = new StringBuffer("");
+			int paraNumber = 0;
 			List fpl = fAST.PL;
 			while (! fpl.isEmpty()) {
 				if (((ParaList) fpl).P.T.equals(StdEnvironment.booleanType))
 					argsTypes.append("Z");         
 				else if (((ParaList) fpl).P.T.equals(StdEnvironment.intType))
-					argsTypes.append("I");         
-				else
-					argsTypes.append("F");         
+					argsTypes.append("I");
+				else if (((ParaList) fpl).P.T.equals(StdEnvironment.floatType))
+					argsTypes.append("F"); 
+				else if(((ParaList) fpl).P.T.isArrayType()) {
+					ArrayType type = (ArrayType)((ParaList) fpl).P.T;
+					if(type.T.isIntType()) {
+						argsTypes.append("[I");
+					} else if(type.T.isFloatType()) {
+						argsTypes.append("[F");
+					} else if(type.T.isBooleanType()) {
+						argsTypes.append("[Z");
+					}
+				}
+				paraNumber++;
 				fpl = ((ParaList) fpl).PL;
 			}
 
 			emit("invokevirtual", classname + "/" + fname + "(" + argsTypes + ")" + retType);
-			frame.pop(argsTypes.length() + 1);
-
+			//frame.pop(argsTypes.length() + 1);
+			//System.out.println(paraNumber);
+			frame.pop(paraNumber);
+			
 			if (! retType.equals("V"))
 				frame.push();
 		}
@@ -420,9 +434,19 @@ public final class Emitter implements Visitor {
 				if (((ParaList) fpl).P.T.equals(StdEnvironment.booleanType))
 					argsTypes.append("Z");         
 				else if (((ParaList) fpl).P.T.equals(StdEnvironment.intType))
-					argsTypes.append("I");         
-				else
-					argsTypes.append("F");         
+					argsTypes.append("I");
+				else if (((ParaList) fpl).P.T.equals(StdEnvironment.floatType))
+					argsTypes.append("F"); 
+				else if(((ParaList) fpl).P.T.isArrayType()) {
+					ArrayType type = (ArrayType)((ParaList) fpl).P.T;
+					if(type.T.isIntType()) {
+						argsTypes.append("[I");
+					} else if(type.T.isFloatType()) {
+						argsTypes.append("[F");
+					} else if(type.T.isBooleanType()) {
+						argsTypes.append("[Z");
+					}
+				}
 				fpl = ((ParaList) fpl).PL;
 			}
 
